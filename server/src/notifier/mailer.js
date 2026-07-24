@@ -56,15 +56,43 @@ function describeWindow({ start, end }) {
   return null; // both bounds absent — the API rejects these; skip defensively
 }
 
+/** Format a 'YYYY-MM-DD' bound as e.g. "Aug 1" without timezone shifting. */
+function formatWindowDate(iso) {
+  const [, m, d] = iso.split('-').map(Number);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[m - 1]} ${d}`;
+}
+
+/** Date-range phrase: "between Aug 1 and Aug 15", "on Aug 1", "from Aug 1", "until Aug 15". */
+function describeDateRange({ dateStart, dateEnd }) {
+  if (dateStart && dateEnd) {
+    return dateStart === dateEnd
+      ? `on ${formatWindowDate(dateStart)}`
+      : `between ${formatWindowDate(dateStart)} and ${formatWindowDate(dateEnd)}`;
+  }
+  if (dateStart) return `from ${formatWindowDate(dateStart)}`;
+  if (dateEnd) return `until ${formatWindowDate(dateEnd)}`;
+  return null;
+}
+
 /**
- * One-line description of the subscription's time-of-day windows (match ANY),
- * e.g. "Showing showtimes: 12:00 p.m. – 5:00 p.m., or 9:00 p.m. – 2:00 a.m.",
- * or null when it has none (empty array = any time).
+ * One-line description of the subscription's time-of-day windows (match ANY)
+ * and/or date range, or null when it has neither. Examples:
+ *   "Showing showtimes: 12:00 p.m. – 5:00 p.m., or 9:00 p.m. – 2:00 a.m."
+ *   "Showing showtimes between Aug 1 and Aug 15."
+ *   "Showing showtimes: after 5:00 p.m., from Aug 1."
  */
-function windowNote({ timeWindows }) {
-  // No trailing '.': the closing "a.m."/"p.m." already ends the sentence.
-  const parts = (timeWindows ?? []).map(describeWindow).filter(Boolean);
-  return parts.length ? `Showing showtimes: ${parts.join(', or ')}` : null;
+function windowNote({ timeWindows, dateStart, dateEnd }) {
+  const times = (timeWindows ?? []).map(describeWindow).filter(Boolean);
+  const dates = describeDateRange({ dateStart, dateEnd });
+  let note = null;
+  if (times.length) {
+    note = `Showing showtimes: ${times.join(', or ')}${dates ? `, ${dates}` : ''}`;
+  } else if (dates) {
+    note = `Showing showtimes ${dates}`;
+  }
+  // End with exactly one period ("p.m." already carries its own).
+  return note && !note.endsWith('.') ? `${note}.` : note;
 }
 
 function escapeHtml(s) {

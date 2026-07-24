@@ -48,6 +48,26 @@ export function inAnyTimeWindow(showStartDateTime, timeWindows) {
 }
 
 /**
+ * True if a session's local date falls inside the subscription's date range.
+ * Both bounds inclusive; null = unbounded on that side. 'YYYY-MM-DD' is
+ * zero-padded, so lexicographic comparison is safe.
+ */
+export function inDateRange(showStartDateTime, dateStart, dateEnd) {
+  const d = showStartDateTime.slice(0, 10);
+  return (dateStart == null || d >= dateStart) && (dateEnd == null || d <= dateEnd);
+}
+
+/** Today's date in the server's local timezone as 'YYYY-MM-DD'. */
+function localToday() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+/**
  * Fetch + flatten showtimes for every distinct (movieId, theatreId) pair,
  * one request per day for `lookaheadDays`, sequential with a polite delay.
  * @returns {Map<string, Array>} pairKey → flattened sessions for that pair
@@ -94,7 +114,18 @@ async function fetchSessionsByPair(pairs, lookaheadDays) {
  */
 export async function pollOnce() {
   const lookaheadDays = Number(process.env.POLL_LOOKAHEAD_DAYS || 30);
-  const subs = await listSubscriptions();
+  const allSubs = await listSubscriptions();
+
+  // Skip subscriptions whose date range already ended: no diff, no email, and
+  // (below) no Cineplex fetches unless another subscription shares the pair.
+  const today = localToday();
+  const subs = allSubs.filter((sub) => {
+    if (sub.dateEnd != null && sub.dateEnd < today) {
+      console.log(`[poller] skipping expired subscription ${sub.id}`);
+      return false;
+    }
+    return true;
+  });
   if (subs.length === 0) {
     console.log('[poller] no subscriptions — nothing to poll');
     return;
@@ -126,10 +157,13 @@ export async function pollOnce() {
           }
         }
       }
-      // Drop sessions outside the subscription's time-of-day windows BEFORE
-      // seeding/diffing, so both passes see the same filtered universe.
-      const sessions = [...byKey.values()].filter((s) =>
-        inAnyTimeWindow(s.showStartDateTime, sub.timeWindows)
+      // Drop sessions outside the subscription's date range, then outside its
+      // time-of-day windows, BEFORE seeding/diffing, so both passes see the
+      // same filtered universe.
+      const sessions = [...byKey.values()].filter(
+        (s) =>
+          inDateRange(s.showStartDateTime, sub.dateStart, sub.dateEnd) &&
+          inAnyTimeWindow(s.showStartDateTime, sub.timeWindows)
       );
 
       if (!sub.seeded) {
