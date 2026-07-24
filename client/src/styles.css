@@ -813,13 +813,50 @@ a.session:focus-visible {
   font-size: 0.95rem;
 }
 
-/* Success screen */
+/* Success screen. The .app-centered state (success only) centers the card
+   in the viewport; the app header is hidden there, so no dead space. */
+.app-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
 .success {
   background: var(--panel);
   border: 1px solid var(--success);
   border-radius: var(--radius);
   padding: 1.5rem;
-  max-width: 560px;
+  max-width: 640px;
+}
+
+.success-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.success-poster {
+  flex-shrink: 0;
+  width: 140px;
+  aspect-ratio: 320 / 470;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--gold);
+  background: var(--panel-2);
+  box-shadow: 0 0 22px var(--glow-soft), 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.success-body {
+  min-width: 0;
+}
+
+.success-body h2 {
+  margin-top: 0;
 }
 
 .success .btn-primary {
@@ -860,6 +897,16 @@ a.session:focus-visible {
   .showtimes-day {
     flex-direction: column;
     gap: 0.25rem;
+  }
+
+  /* Stack the success card: poster centered above the text. */
+  .success-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .success-poster {
+    width: 120px;
   }
 }
 

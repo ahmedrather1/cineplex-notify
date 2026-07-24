@@ -14,6 +14,22 @@ const NO_WINDOWS = { presets: [], custom: null };
 
 const STEPS = ['Movie', 'Theatres', 'Email'];
 
+// Poster on the success card; hides itself when the URL is missing or the
+// image fails to load (hasPosterImage can be false upstream). Keyed by
+// movie id at the call site so the failure state resets per movie.
+function SuccessPoster({ movie }) {
+  const [failed, setFailed] = useState(false);
+  if (!movie.posterUrl || failed) return null;
+  return (
+    <img
+      className="success-poster"
+      src={movie.posterUrl}
+      alt={movie.name}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export default function App() {
   // 0 = movie, 1 = theatres, 2 = email, 3 = success
   const [step, setStep] = useState(0);
@@ -152,41 +168,53 @@ export default function App() {
   } else {
     body = (
       <section className="success">
-        <h2>You&rsquo;re subscribed!</h2>
-        <p>
-          We&rsquo;ll email <strong>{confirmedEmail}</strong> when new showtimes for{' '}
-          <strong>{movie.name}</strong> are released at:
-        </p>
-        <ul>
-          {selectedTheatres.map((t) => (
-            <li key={t.theatreId}>
-              {t.name} — {t.city}, {t.provinceCode}
-            </li>
-          ))}
-        </ul>
-        <p>
-          Showtime window: <strong>{formatWindows(timeWindows)}</strong>
-        </p>
-        <p className="fine-print">
-          Every email we send includes an unsubscribe link, so you can stop the
-          alerts at any time.
-        </p>
-        <button type="button" className="btn btn-primary" onClick={reset}>
-          Set up another alert
-        </button>
+        <div className="success-layout">
+          <SuccessPoster key={movie.id} movie={movie} />
+          <div className="success-body">
+            <h2>You&rsquo;re subscribed!</h2>
+            <p>
+              We&rsquo;ll email <strong>{confirmedEmail}</strong> when new showtimes for{' '}
+              <strong>{movie.name}</strong> are released at:
+            </p>
+            <ul>
+              {selectedTheatres.map((t) => (
+                <li key={t.theatreId}>
+                  {t.name} — {t.city}, {t.provinceCode}
+                </li>
+              ))}
+            </ul>
+            <p>
+              Showtime window: <strong>{formatWindows(timeWindows)}</strong>
+            </p>
+            <p className="fine-print">
+              Every email we send includes an unsubscribe link, so you can stop
+              the alerts at any time.
+            </p>
+            <button type="button" className="btn btn-primary" onClick={reset}>
+              Set up another alert
+            </button>
+          </div>
+        </div>
       </section>
     );
   }
 
+  // Success state: the app header is hidden and the card is centered in the
+  // viewport — the card carries its own context, and keeping the pinned
+  // header would fight the vertical centering and leave dead space below.
+  const isSuccess = step === 3;
+
   return (
-    <main className="app">
-      <header className="app-header">
-        <h1>Cineplex Showtime Alerts</h1>
-        <p>
-          Pick a movie and your theatres, leave an email, and get notified when
-          new showtimes are released.
-        </p>
-      </header>
+    <main className={isSuccess ? 'app app-centered' : 'app'}>
+      {!isSuccess && (
+        <header className="app-header">
+          <h1>Cineplex Showtime Alerts</h1>
+          <p>
+            Pick a movie and your theatres, leave an email, and get notified when
+            new showtimes are released.
+          </p>
+        </header>
+      )}
 
       {step < 3 && (
         <ol className="steps">
