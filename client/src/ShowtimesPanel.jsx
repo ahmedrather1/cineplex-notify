@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { fetchShowtimes } from './api.js';
 import { formatTime, matchesAny } from './timeWindow.js';
 import { isDateInRange } from './dateRange.js';
+import { primaryFormat } from './formats.js';
 
 // Sessions can now span months out (advance/coming-soon dates), so anything
 // more than ADVANCE_DAYS away is tagged. Computed once per render.
@@ -53,47 +54,10 @@ function groupByDate(sessions, cutoffISO) {
   return groups;
 }
 
-// Premium formats, most significant first — the primary format of a session
-// is the highest-priority tag present in its experienceTypes.
-const FORMAT_PRIORITY = ['IMAX', 'UltraAVX', 'VIP', 'D-BOX', 'ScreenX', '4DX', '3D'];
-
-// Tags that don't denote a premium format on their own: generic screen/
-// projection/accessibility labels that fall back to "Regular".
-const GENERIC_TYPES = new Set(
-  [
-    'Regular',
-    'Digital',
-    '2D',
-    'Standard',
-    'Laser Projection',
-    'Closed Caption',
-    'Closed Captioned',
-    'Closed Captioning',
-    'CC',
-    'Described Video',
-    'Descriptive Video',
-    'AD',
-    'Subtitled',
-    'Open Caption',
-  ].map((t) => t.toLowerCase())
-);
-
+// Format classification (primaryFormat) is imported from ./formats.js, a
+// verbatim mirror of server/src/cineplex.js, so section headers and the
+// alert-filter agree.
 const REGULAR = 'Regular';
-
-/**
- * Normalized primary format for a session: the top-priority premium tag if
- * present, else the first unknown (non-generic) premium tag under its own
- * name, else "Regular". Deterministic and case-insensitive on match.
- */
-function primaryFormat(experienceTypes) {
-  const types = experienceTypes || [];
-  const lower = types.map((t) => t.toLowerCase());
-  for (const fmt of FORMAT_PRIORITY) {
-    if (lower.includes(fmt.toLowerCase())) return fmt;
-  }
-  const unknown = types.find((t) => !GENERIC_TYPES.has(t.toLowerCase()));
-  return unknown || REGULAR;
-}
 
 /**
  * Group a day's sessions by primary format: Regular first, then premium
@@ -117,7 +81,7 @@ function groupByFormat(sessions) {
   }));
 }
 
-function SessionCard({ session, primary, outsideTime, outsideDates }) {
+function SessionCard({ session, primary, outsideTime, outsideDates, outsideFormat }) {
   // Full detail for the tooltip; the on-card text drops the primary format
   // (shown by the section header) so cards read cleanly without redundant
   // "IMAX · …" — only the distinguishing tags (e.g. "70mm") + auditorium.
@@ -129,17 +93,19 @@ function SessionCard({ session, primary, outsideTime, outsideDates }) {
     .filter(Boolean)
     .join(' · ');
   const fullDetail = [...allTypes, session.auditorium].filter(Boolean).join(' · ');
-  // One fixed-height flag row on every card so in-window and out-of-window
-  // cards keep identical dimensions. Priority when several apply:
-  // sold-out > outside dates > outside time window.
-  const outside = outsideTime || outsideDates;
+  // One fixed-height flag row on every card so dimmed and normal cards keep
+  // identical dimensions. Deterministic priority when several apply:
+  // sold-out > outside dates > outside time window > not your format.
+  const outside = outsideTime || outsideDates || outsideFormat;
   const flag = session.isSoldOut
     ? 'Sold out'
     : outsideDates
       ? 'Outside your dates'
       : outsideTime
         ? 'Outside your window'
-        : null;
+        : outsideFormat
+          ? 'Not your format'
+          : null;
   const className = `session${session.isSoldOut ? ' sold-out' : ''}${outside ? ' outside-window' : ''}`;
 
   const inner = (
@@ -166,7 +132,7 @@ function SessionCard({ session, primary, outsideTime, outsideDates }) {
   );
 }
 
-export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRange }) {
+export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRange, formats }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -255,6 +221,9 @@ export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRan
                                 outsideDates={
                                   Boolean(dateRange.start || dateRange.end) &&
                                   !isDateInRange(s.showStartDateTime.split('T')[0], dateRange)
+                                }
+                                outsideFormat={
+                                  formats.length > 0 && !formats.includes(f.format)
                                 }
                               />
                             </li>

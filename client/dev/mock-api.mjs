@@ -196,7 +196,7 @@ const server = http.createServer((req, res) => {
       }
       // Old flat timeStart/timeEnd keys are gone from the contract; if a
       // stale client sends them they are simply ignored, not validated.
-      const { email, movieId, movieName, theatreIds, timeWindows, dateStart, dateEnd } = parsed;
+      const { email, movieId, movieName, theatreIds, timeWindows, dateStart, dateEnd, formats } = parsed;
       if (!email || !movieId || !movieName || !Array.isArray(theatreIds) || theatreIds.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'email, movieId, movieName and non-empty theatreIds are required' }));
@@ -253,18 +253,35 @@ const server = http.createServer((req, res) => {
           return;
         }
       }
+      // Optional formats: array of canonical values from SELECTABLE_FORMATS
+      // (mirrors server/src/cineplex.js). A value outside the set or a
+      // non-array → 400 (docs/architecture.md §Internal REST contract).
+      const SELECTABLE_FORMATS = ['Regular', 'IMAX', 'UltraAVX', 'VIP', 'D-BOX', 'ScreenX', '4DX', '3D'];
+      if (formats !== undefined) {
+        const badFormats =
+          !Array.isArray(formats) ||
+          formats.some((f) => !SELECTABLE_FORMATS.includes(f));
+        if (badFormats) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: `formats must be an array of ${SELECTABLE_FORMATS.join(', ')}`,
+          }));
+          return;
+        }
+      }
       if (email === 'fail@example.com') {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'This email address is not accepting subscriptions (mock failure)' }));
         return;
       }
-      // Echo the windows/dates back so dev payloads are verifiable end-to-end.
+      // Echo the windows/dates/formats back so dev payloads are verifiable.
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         id: crypto.randomUUID(),
         ...(timeWindows !== undefined ? { timeWindows } : {}),
         ...(dateStart !== undefined ? { dateStart } : {}),
         ...(dateEnd !== undefined ? { dateEnd } : {}),
+        ...(formats !== undefined ? { formats } : {}),
       }));
     });
     return;

@@ -44,6 +44,7 @@ export default function App() {
   const [theatreIds, setTheatreIds] = useState([]);
   const [timeSelection, setTimeSelection] = useState(NO_WINDOWS);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [formats, setFormats] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -84,6 +85,7 @@ export default function App() {
         timeWindows,
         dateStart: dateRange.start || undefined,
         dateEnd: dateRange.end || undefined,
+        formats,
       });
       setConfirmedEmail(email);
       setStep(3);
@@ -100,6 +102,7 @@ export default function App() {
     setTheatreIds([]);
     setTimeSelection(NO_WINDOWS);
     setDateRange({ start: '', end: '' });
+    setFormats([]);
     setApiError(null);
     setConfirmedEmail(null);
   }
@@ -153,6 +156,8 @@ export default function App() {
         onTimeSelectionChange={setTimeSelection}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
+        formats={formats}
+        onFormatsChange={setFormats}
         onBack={() => setStep(0)}
         onNext={() => {
           setApiError(null);
@@ -167,6 +172,7 @@ export default function App() {
         theatres={selectedTheatres}
         timeWindows={timeWindows}
         dateRange={dateRange}
+        formats={formats}
         onBack={() => setStep(1)}
         onSubmit={submit}
         submitting={submitting}
@@ -195,6 +201,8 @@ export default function App() {
               Showtime window: <strong>{formatWindows(timeWindows)}</strong>
               <br />
               Dates: <strong>{formatDateRange(dateRange)}</strong>
+              <br />
+              Formats: <strong>{formats.length ? formats.join(', ') : 'Any format'}</strong>
             </p>
             <p className="fine-print">
               Every email we send includes an unsubscribe link, so you can stop
