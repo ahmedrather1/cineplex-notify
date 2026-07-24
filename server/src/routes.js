@@ -49,11 +49,28 @@ api.get(
 // Plausibility check only — real validation is the email arriving.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// POST /api/subscriptions — { email, movieId, movieName, theatreIds } → 201 { id }.
+// 'HH:MM' 24h clock, zero-padded (e.g. '09:00', '21:30').
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Normalize an optional 'HH:MM' time-of-day bound from the request body.
+ * Absent/empty string → null; valid 'HH:MM' → itself; anything else → error.
+ * (timeStart > timeEnd is deliberately allowed: overnight wrap, e.g. 21:00–02:00.)
+ */
+function parseTimeBound(value, field) {
+  if (value === undefined || value === null || value === '') return { value: null };
+  if (typeof value !== 'string' || !TIME_RE.test(value)) {
+    return { error: `${field} must be an 'HH:MM' 24-hour time (e.g. '21:30')` };
+  }
+  return { value };
+}
+
+// POST /api/subscriptions —
+// { email, movieId, movieName, theatreIds, timeStart?, timeEnd? } → 201 { id }.
 api.post(
   '/subscriptions',
   asyncHandler(async (req, res) => {
-    const { email, movieId, movieName, theatreIds } = req.body ?? {};
+    const { email, movieId, movieName, theatreIds, timeStart, timeEnd } = req.body ?? {};
 
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: 'a valid email is required' });
@@ -74,11 +91,19 @@ api.post(
         .json({ error: 'theatreIds must be a non-empty array of integers' });
     }
 
+    // Optional time-of-day window bounds — each independently optional.
+    const start = parseTimeBound(timeStart, 'timeStart');
+    if (start.error) return res.status(400).json({ error: start.error });
+    const end = parseTimeBound(timeEnd, 'timeEnd');
+    if (end.error) return res.status(400).json({ error: end.error });
+
     const id = await createSubscription({
       email: email.trim(),
       movieId,
       movieName: movieName.trim(),
       theatreIds: [...new Set(theatreIds)],
+      timeStart: start.value,
+      timeEnd: end.value,
     });
     res.status(201).json({ id });
   })
