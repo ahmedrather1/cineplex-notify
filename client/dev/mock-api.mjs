@@ -82,13 +82,23 @@ function dateStr(offsetDays) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-// Now-playing plan: sessions over the next couple of days.
+// Now-playing plan: day 1 mixes several viewing formats (with multi-tag
+// sessions) so the format grouping is visible; day 2 is single-format
+// (Regular only) to confirm a one-format day still reads fine. Times are
+// intentionally out of order to prove per-format time sorting on the client.
 const NOW_PLAYING_PLAN = [
   // [dayOffset, 'HH:MM', experienceTypes, auditorium, isSoldOut]
-  [1, '13:05', ['Regular'], 'Auditorium 3', false],
-  [1, '18:45', ['IMAX'], 'Auditorium 1', true],
-  [1, '21:30', ['Regular'], 'Auditorium 5', false],
-  [2, '16:10', ['UltraAVX'], 'Auditorium 7', false],
+  [1, '20:10', ['Regular'], 'Auditorium 3', false],
+  [1, '12:00', ['Regular'], 'Auditorium 3', false],
+  [1, '18:45', ['IMAX', '70mm'], 'Auditorium 1', true],
+  [1, '13:30', ['IMAX', '70mm'], 'Auditorium 1', false],
+  [1, '15:20', ['Regular'], 'Auditorium 4', false],
+  [1, '19:30', ['UltraAVX', 'D-BOX', 'Laser Projection'], 'Auditorium 7', false],
+  [1, '14:00', ['UltraAVX'], 'Auditorium 7', false],
+  [1, '16:40', ['D-BOX'], 'Auditorium 6', false],
+  [1, '22:15', ['IMAX'], 'Auditorium 1', false],
+  [2, '16:10', ['Regular'], 'Auditorium 5', false],
+  [2, '13:00', ['Regular'], 'Auditorium 5', false],
   [2, '23:50', ['Regular'], 'Auditorium 5', false],
 ];
 

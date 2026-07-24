@@ -646,6 +646,34 @@ h2 {
   box-shadow: 0 0 8px var(--glow-soft);
 }
 
+/* Right column of a day: its format sections stacked. */
+.showtimes-formats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+/* One format's label + its time-sorted cards. */
+.format-section {
+  min-width: 0;
+}
+
+.format-label {
+  display: inline-block;
+  margin-bottom: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--gold-hi);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 /* Uniform grid of equal-size session cards. */
 .session-list {
   display: grid;
@@ -654,7 +682,6 @@ h2 {
   margin: 0;
   padding: 0;
   list-style: none;
-  flex: 1;
   min-width: 0;
 }
 

@@ -53,10 +53,82 @@ function groupByDate(sessions, cutoffISO) {
   return groups;
 }
 
-function SessionCard({ session, outsideTime, outsideDates }) {
-  const sub = [...(session.experienceTypes || []), session.auditorium]
+// Premium formats, most significant first — the primary format of a session
+// is the highest-priority tag present in its experienceTypes.
+const FORMAT_PRIORITY = ['IMAX', 'UltraAVX', 'VIP', 'D-BOX', 'ScreenX', '4DX', '3D'];
+
+// Tags that don't denote a premium format on their own: generic screen/
+// projection/accessibility labels that fall back to "Regular".
+const GENERIC_TYPES = new Set(
+  [
+    'Regular',
+    'Digital',
+    '2D',
+    'Standard',
+    'Laser Projection',
+    'Closed Caption',
+    'Closed Captioned',
+    'Closed Captioning',
+    'CC',
+    'Described Video',
+    'Descriptive Video',
+    'AD',
+    'Subtitled',
+    'Open Caption',
+  ].map((t) => t.toLowerCase())
+);
+
+const REGULAR = 'Regular';
+
+/**
+ * Normalized primary format for a session: the top-priority premium tag if
+ * present, else the first unknown (non-generic) premium tag under its own
+ * name, else "Regular". Deterministic and case-insensitive on match.
+ */
+function primaryFormat(experienceTypes) {
+  const types = experienceTypes || [];
+  const lower = types.map((t) => t.toLowerCase());
+  for (const fmt of FORMAT_PRIORITY) {
+    if (lower.includes(fmt.toLowerCase())) return fmt;
+  }
+  const unknown = types.find((t) => !GENERIC_TYPES.has(t.toLowerCase()));
+  return unknown || REGULAR;
+}
+
+/**
+ * Group a day's sessions by primary format: Regular first, then premium
+ * formats alphabetically; sessions time-sorted within each section.
+ */
+function groupByFormat(sessions) {
+  const byFormat = new Map();
+  for (const s of sessions) {
+    const fmt = primaryFormat(s.experienceTypes);
+    if (!byFormat.has(fmt)) byFormat.set(fmt, []);
+    byFormat.get(fmt).push(s);
+  }
+  const order = [...byFormat.keys()].sort((a, b) => {
+    if (a === REGULAR) return -1;
+    if (b === REGULAR) return 1;
+    return a.localeCompare(b);
+  });
+  return order.map((format) => ({
+    format,
+    sessions: byFormat.get(format).slice().sort((a, b) => a.hhmm.localeCompare(b.hhmm)),
+  }));
+}
+
+function SessionCard({ session, primary, outsideTime, outsideDates }) {
+  // Full detail for the tooltip; the on-card text drops the primary format
+  // (shown by the section header) so cards read cleanly without redundant
+  // "IMAX · …" — only the distinguishing tags (e.g. "70mm") + auditorium.
+  const allTypes = session.experienceTypes || [];
+  const sub = [
+    ...allTypes.filter((t) => t.toLowerCase() !== primary.toLowerCase()),
+    session.auditorium,
+  ]
     .filter(Boolean)
     .join(' · ');
+  const fullDetail = [...allTypes, session.auditorium].filter(Boolean).join(' · ');
   // One fixed-height flag row on every card so in-window and out-of-window
   // cards keep identical dimensions. Priority when several apply:
   // sold-out > outside dates > outside time window.
@@ -73,7 +145,7 @@ function SessionCard({ session, outsideTime, outsideDates }) {
   const inner = (
     <>
       <span className="session-time">{formatTime(session.hhmm)}</span>
-      <span className="session-sub" title={sub}>
+      <span className="session-sub" title={fullDetail}>
         {sub || ' '}
       </span>
       <span className="session-flag-row">
@@ -167,22 +239,30 @@ export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRan
                     {g.dateLabel}
                     {g.advance && <span className="advance-badge">Advance</span>}
                   </span>
-                  <ul className="session-list">
-                    {g.sessions.map((s) => (
-                      <li key={s.sessionId}>
-                        <SessionCard
-                          session={s}
-                          outsideTime={
-                            timeWindows.length > 0 && !matchesAny(s.hhmm, timeWindows)
-                          }
-                          outsideDates={
-                            Boolean(dateRange.start || dateRange.end) &&
-                            !isDateInRange(s.showStartDateTime.split('T')[0], dateRange)
-                          }
-                        />
-                      </li>
+                  <div className="showtimes-formats">
+                    {groupByFormat(g.sessions).map((f) => (
+                      <div key={f.format} className="format-section">
+                        <span className="format-label">{f.format}</span>
+                        <ul className="session-list">
+                          {f.sessions.map((s) => (
+                            <li key={s.sessionId}>
+                              <SessionCard
+                                session={s}
+                                primary={f.format}
+                                outsideTime={
+                                  timeWindows.length > 0 && !matchesAny(s.hhmm, timeWindows)
+                                }
+                                outsideDates={
+                                  Boolean(dateRange.start || dateRange.end) &&
+                                  !isDateInRange(s.showStartDateTime.split('T')[0], dateRange)
+                                }
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               ))
             )}
