@@ -102,6 +102,14 @@ param does NOT work — filter client-side.
 ]
 ```
 
+### Linking users to a showtime
+
+Use `deeplinkUrl` (public share link; 302-redirects to the movie page with the
+session selected). `ticketingUrl` is the website's internal redirect and
+returns **401 "user session token not set"** when opened without an active
+cineplex.com session (e.g. from an email) — `flattenSessions()` therefore maps
+its `ticketingUrl` field to the session's `deeplinkUrl`.
+
 ### Diffing "new showings"
 
 `vistaSessionId` is unique per showtime per theatre. A new showing = a

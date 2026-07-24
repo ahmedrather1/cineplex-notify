@@ -100,7 +100,11 @@ export function flattenSessions(showtimesResponse) {
               showStartDateTimeUtc: s.showStartDateTimeUtc,
               auditorium: s.auditorium,
               isSoldOut: s.isSoldOut,
-              ticketingUrl: s.ticketingUrl,
+              // deeplinkUrl is Cineplex's public share link (302 → movie page with
+              // the session selected). s.ticketingUrl is their internal redirect and
+              // 401s ("user session token not set") without a cineplex.com session,
+              // so it's only a last-resort fallback.
+              ticketingUrl: s.deeplinkUrl || s.ticketingUrl,
             });
           }
         }
