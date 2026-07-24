@@ -238,12 +238,38 @@ function parseTimeWindows(value) {
   return { value: windows };
 }
 
+// 'YYYY-MM-DD' calendar date (month 01-12, day 01-31).
+const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * Normalize an optional 'YYYY-MM-DD' date bound from the request body.
+ * Absent/empty string → null; valid date string → itself; anything else →
+ * error. Cross-field rules (ordering, past dates) are checked by the caller.
+ */
+function parseDateBound(value, field) {
+  if (value === undefined || value === null || value === '') return { value: null };
+  if (typeof value !== 'string' || !DATE_RE.test(value)) {
+    return { error: `${field} must be a 'YYYY-MM-DD' date (e.g. '2026-08-01')` };
+  }
+  return { value };
+}
+
+/** Today's date in server-local time as 'YYYY-MM-DD'. */
+function todayLocalISO() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 // POST /api/subscriptions —
-// { email, movieId, movieName, theatreIds, timeWindows? } → 201 { id }.
+// { email, movieId, movieName, theatreIds, timeWindows?, dateStart?, dateEnd? }
+// → 201 { id }.
 api.post(
   '/subscriptions',
   asyncHandler(async (req, res) => {
-    const { email, movieId, movieName, theatreIds, timeWindows } = req.body ?? {};
+    const { email, movieId, movieName, theatreIds, timeWindows, dateStart, dateEnd } =
+      req.body ?? {};
 
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: 'a valid email is required' });
@@ -268,12 +294,28 @@ api.post(
     const windows = parseTimeWindows(timeWindows);
     if (windows.error) return res.status(400).json({ error: windows.error });
 
+    // Optional inclusive showtime-date range. Unlike time windows, dates do
+    // not wrap: start must not be after end, and the range can't be entirely
+    // in the past.
+    const dStart = parseDateBound(dateStart, 'dateStart');
+    if (dStart.error) return res.status(400).json({ error: dStart.error });
+    const dEnd = parseDateBound(dateEnd, 'dateEnd');
+    if (dEnd.error) return res.status(400).json({ error: dEnd.error });
+    if (dStart.value && dEnd.value && dStart.value > dEnd.value) {
+      return res.status(400).json({ error: 'dateStart must not be after dateEnd' });
+    }
+    if (dEnd.value && dEnd.value < todayLocalISO()) {
+      return res.status(400).json({ error: 'dateEnd is in the past' });
+    }
+
     const id = await createSubscription({
       email: email.trim(),
       movieId,
       movieName: movieName.trim(),
       theatreIds: [...new Set(theatreIds)],
       timeWindows: windows.value,
+      dateStart: dStart.value,
+      dateEnd: dEnd.value,
     });
     res.status(201).json({ id });
   })
