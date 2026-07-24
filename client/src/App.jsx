@@ -6,9 +6,11 @@ import { fetchMovies, fetchTheatres, createSubscription } from './api.js';
 import MovieStep from './MovieStep.jsx';
 import TheatreStep from './TheatreStep.jsx';
 import EmailStep from './EmailStep.jsx';
-import { formatWindow } from './timeWindow.js';
+import { buildWindows, formatWindows } from './timeWindow.js';
+import { popcornBurst } from './popcorn.js';
 
-const ANY_TIME = { preset: 'any', timeStart: '', timeEnd: '' };
+// No windows selected: presets empty, custom off — "any time".
+const NO_WINDOWS = { presets: [], custom: null };
 
 const STEPS = ['Movie', 'Theatres', 'Email'];
 
@@ -23,7 +25,7 @@ export default function App() {
 
   const [movie, setMovie] = useState(null);
   const [theatreIds, setTheatreIds] = useState([]);
-  const [timeWindow, setTimeWindow] = useState(ANY_TIME);
+  const [timeSelection, setTimeSelection] = useState(NO_WINDOWS);
 
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -61,8 +63,7 @@ export default function App() {
         movieId: movie.id,
         movieName: movie.name,
         theatreIds,
-        timeStart: timeWindow.timeStart || undefined,
-        timeEnd: timeWindow.timeEnd || undefined,
+        timeWindows,
       });
       setConfirmedEmail(email);
       setStep(3);
@@ -77,7 +78,7 @@ export default function App() {
     setStep(0);
     setMovie(null);
     setTheatreIds([]);
-    setTimeWindow(ANY_TIME);
+    setTimeSelection(NO_WINDOWS);
     setApiError(null);
     setConfirmedEmail(null);
   }
@@ -85,6 +86,9 @@ export default function App() {
   const selectedTheatres = theatres
     ? theatres.filter((t) => theatreIds.includes(t.theatreId))
     : [];
+
+  // The timeWindows payload derived from the current selection ([] = any time).
+  const timeWindows = buildWindows(timeSelection);
 
   let body;
   if (loadError) {
@@ -104,7 +108,15 @@ export default function App() {
     body = (
       <MovieStep
         movies={movies}
-        onSelect={(m) => {
+        onSelect={(m, event) => {
+          // Keyboard activation reports (0, 0) — burst from the card instead.
+          let { clientX: x, clientY: y } = event;
+          if (!x && !y) {
+            const r = event.currentTarget.getBoundingClientRect();
+            x = r.left + r.width / 2;
+            y = r.top + r.height / 2;
+          }
+          popcornBurst(x, y);
           setMovie(m);
           setStep(1);
         }}
@@ -116,8 +128,8 @@ export default function App() {
         theatres={theatres}
         selectedIds={theatreIds}
         onToggle={toggleTheatre}
-        timeWindow={timeWindow}
-        onTimeWindowChange={setTimeWindow}
+        timeSelection={timeSelection}
+        onTimeSelectionChange={setTimeSelection}
         onBack={() => setStep(0)}
         onNext={() => {
           setApiError(null);
@@ -130,7 +142,7 @@ export default function App() {
       <EmailStep
         movie={movie}
         theatres={selectedTheatres}
-        timeWindow={timeWindow}
+        timeWindows={timeWindows}
         onBack={() => setStep(1)}
         onSubmit={submit}
         submitting={submitting}
@@ -153,7 +165,7 @@ export default function App() {
           ))}
         </ul>
         <p>
-          Showtime window: <strong>{formatWindow(timeWindow)}</strong>
+          Showtime window: <strong>{formatWindows(timeWindows)}</strong>
         </p>
         <p className="fine-print">
           Every email we send includes an unsubscribe link, so you can stop the

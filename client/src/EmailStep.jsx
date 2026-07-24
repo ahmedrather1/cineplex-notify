@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { formatWindow } from './timeWindow.js';
+import { formatWindows } from './timeWindow.js';
 import ShowtimesPanel from './ShowtimesPanel.jsx';
+import { popcornBurst } from './popcorn.js';
 
 // Trivial sanity check on top of the browser's type="email" validation.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function EmailStep({ movie, theatres, timeWindow, onBack, onSubmit, submitting, apiError }) {
+export default function EmailStep({ movie, theatres, timeWindows, onBack, onSubmit, submitting, apiError }) {
   const [email, setEmail] = useState('');
   const [localError, setLocalError] = useState(null);
 
@@ -17,6 +18,12 @@ export default function EmailStep({ movie, theatres, timeWindow, onBack, onSubmi
       return;
     }
     setLocalError(null);
+    // Celebrate from the submit button; the POST is not delayed by this.
+    const btn = e.currentTarget.querySelector('button[type="submit"]');
+    if (btn) {
+      const r = btn.getBoundingClientRect();
+      popcornBurst(r.left + r.width / 2, r.top + r.height / 2);
+    }
     onSubmit(trimmed);
   }
 
@@ -37,7 +44,7 @@ export default function EmailStep({ movie, theatres, timeWindow, onBack, onSubmi
                 className="out-link"
                 href={movie.detailPageUrl}
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
               >
                 View on Cineplex ↗
               </a>
@@ -47,13 +54,13 @@ export default function EmailStep({ movie, theatres, timeWindow, onBack, onSubmi
         <dt>Theatres ({theatres.length})</dt>
         <dd>{theatres.map((t) => t.name).join(' · ')}</dd>
         <dt>Showtime window</dt>
-        <dd>{formatWindow(timeWindow)}</dd>
+        <dd>{formatWindows(timeWindows)}</dd>
       </dl>
 
       <ShowtimesPanel
         movie={movie}
         theatreIds={theatres.map((t) => t.theatreId)}
-        timeWindow={timeWindow}
+        timeWindows={timeWindows}
       />
 
       <form className="email-form" onSubmit={handleSubmit} noValidate>

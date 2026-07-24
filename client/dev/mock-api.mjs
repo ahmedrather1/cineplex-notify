@@ -172,19 +172,36 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         return;
       }
-      const { email, movieId, movieName, theatreIds, timeStart, timeEnd } = parsed;
+      // Old flat timeStart/timeEnd keys are gone from the contract; if a
+      // stale client sends them they are simply ignored, not validated.
+      const { email, movieId, movieName, theatreIds, timeWindows } = parsed;
       if (!email || !movieId || !movieName || !Array.isArray(theatreIds) || theatreIds.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'email, movieId, movieName and non-empty theatreIds are required' }));
         return;
       }
-      // Optional time-of-day window: each bound independently optional,
-      // 'HH:MM' 24h when present (docs/architecture.md §Internal REST contract).
+      // Optional timeWindows: array (max 6) of { start?, end? }; each entry
+      // must be an object with at least one bound and every present bound a
+      // valid 'HH:MM' 24h string (docs/architecture.md §Internal REST contract).
       const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-      for (const [field, val] of [['timeStart', timeStart], ['timeEnd', timeEnd]]) {
-        if (val !== undefined && (typeof val !== 'string' || !HHMM_RE.test(val))) {
+      if (timeWindows !== undefined) {
+        const badWindows =
+          !Array.isArray(timeWindows) ||
+          timeWindows.length > 6 ||
+          timeWindows.some(
+            (w) =>
+              typeof w !== 'object' ||
+              w === null ||
+              Array.isArray(w) ||
+              (w.start === undefined && w.end === undefined) ||
+              (w.start !== undefined && (typeof w.start !== 'string' || !HHMM_RE.test(w.start))) ||
+              (w.end !== undefined && (typeof w.end !== 'string' || !HHMM_RE.test(w.end)))
+          );
+        if (badWindows) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `${field} must be an 'HH:MM' 24h string` }));
+          res.end(JSON.stringify({
+            error: "timeWindows must be an array (max 6) of { start?, end? } objects with at least one 'HH:MM' 24h bound each",
+          }));
           return;
         }
       }
@@ -193,12 +210,11 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'This email address is not accepting subscriptions (mock failure)' }));
         return;
       }
-      // Echo the window back so dev payloads are verifiable end-to-end.
+      // Echo the windows back so dev payloads are verifiable end-to-end.
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         id: crypto.randomUUID(),
-        ...(timeStart !== undefined ? { timeStart } : {}),
-        ...(timeEnd !== undefined ? { timeEnd } : {}),
+        ...(timeWindows !== undefined ? { timeWindows } : {}),
       }));
     });
     return;

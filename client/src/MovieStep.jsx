@@ -63,7 +63,7 @@ export default function MovieStep({ movies, onSelect }) {
               key={m.id}
               type="button"
               className="movie-card"
-              onClick={() => onSelect(m)}
+              onClick={(e) => onSelect(m, e)}
             >
               <img src={m.posterUrl} alt="" loading="lazy" />
               <span className="movie-meta">
