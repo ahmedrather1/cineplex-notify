@@ -19,6 +19,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pairKey = (movieId, theatreId) => `${movieId}:${theatreId}`;
 
 /**
+ * True if a session's local start time falls inside a subscription's
+ * time-of-day window. `showStartDateTime` is Cineplex's zero-padded local
+ * "YYYY-MM-DDTHH:MM:SS", so slicing out 'HH:MM' makes lexicographic
+ * comparison safe. A null bound is unbounded on that side;
+ * `timeStart > timeEnd` wraps overnight (e.g. 21:00–02:00 matches
+ * t >= 21:00 OR t <= 02:00).
+ */
+export function inTimeWindow(showStartDateTime, timeStart, timeEnd) {
+  if (!timeStart && !timeEnd) return true;
+  const t = showStartDateTime.slice(11, 16);
+  if (timeStart && timeEnd) {
+    return timeStart <= timeEnd
+      ? t >= timeStart && t <= timeEnd
+      : t >= timeStart || t <= timeEnd;
+  }
+  return timeStart ? t >= timeStart : t <= timeEnd;
+}
+
+/**
  * Fetch + flatten showtimes for every distinct (movieId, theatreId) pair,
  * one request per day for `lookaheadDays`, sequential with a polite delay.
  * @returns {Map<string, Array>} pairKey → flattened sessions for that pair
@@ -97,7 +116,11 @@ export async function pollOnce() {
           }
         }
       }
-      const sessions = [...byKey.values()];
+      // Drop sessions outside the subscription's time-of-day window BEFORE
+      // seeding/diffing, so both passes see the same filtered universe.
+      const sessions = [...byKey.values()].filter((s) =>
+        inTimeWindow(s.showStartDateTime, sub.timeStart, sub.timeEnd)
+      );
 
       if (!sub.seeded) {
         // First pass: everything that already exists isn't "new" — seed silently.
