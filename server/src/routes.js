@@ -6,9 +6,8 @@ import { Router } from 'express';
 import {
   getMovies,
   getTheatres,
-  getShowtimes,
+  getFilmShowtimes,
   flattenSessions,
-  toApiDate,
 } from './cineplex.js';
 import { createSubscription, deleteSubscription } from './db.js';
 
@@ -52,34 +51,51 @@ api.get(
   })
 );
 
-// --- GET /api/showtimes — preview of current showings for a movie at up to
-// 5 theatres over the next `days` days. Cached per (movieId, theatreId, date)
-// so client traffic stays polite to Cineplex; uncached fetches run
-// sequentially with a ~100 ms delay between them.
+// --- GET /api/showtimes — ALL upcoming showings (today onward, including
+// advance/coming-soon dates months out) for a movie at up to 5 theatres.
+// Backed by getFilmShowtimes(movieId): one national /showtimes?filmId= call
+// returns every date/theatre for the film — the only way to surface advance
+// showings whose dates fall outside a short forward window. We cache the
+// FLATTENED session list per movieId (a wide now-playing film flattens to
+// thousands of sessions ≈ a few MB, so keep only a handful of movies) and
+// filter per request to the requested theatres.
 
 const SHOWTIMES_TTL_MS = 10 * 60 * 1000; // ~10 min
-const SHOWTIMES_CACHE_MAX = 500; // 500 (movie, theatre, day) entries ≈ a few MB tops
-const showtimesCache = new Map(); // "movieId:theatreId:MM/DD/YYYY" → { sessions, fetchedAt }
+const SHOWTIMES_CACHE_MAX = 10; // at most ~10 films' flattened sessions in memory
+const filmSessionsCache = new Map(); // movieId → { sessions, fetchedAt }
 
-/** Drop expired entries; if still over cap, drop oldest (Map keeps insertion order). */
-function pruneShowtimesCache() {
+/**
+ * Flattened, movie-filtered sessions for one film, cached ~10 min with a
+ * bounded LRU (Map preserves insertion order; a hit is re-inserted to mark it
+ * most-recently-used, and the oldest entry is evicted once over the cap).
+ */
+async function getFilmSessions(movieId) {
   const now = Date.now();
-  for (const [key, entry] of showtimesCache) {
-    if (now - entry.fetchedAt >= SHOWTIMES_TTL_MS) showtimesCache.delete(key);
+  const hit = filmSessionsCache.get(movieId);
+  if (hit && now - hit.fetchedAt < SHOWTIMES_TTL_MS) {
+    filmSessionsCache.delete(movieId); // move to newest (LRU recency)
+    filmSessionsCache.set(movieId, hit);
+    return hit.sessions;
   }
-  for (const key of showtimesCache.keys()) {
-    if (showtimesCache.size <= SHOWTIMES_CACHE_MAX) break;
-    showtimesCache.delete(key);
+  const raw = await getFilmShowtimes(movieId);
+  const sessions = flattenSessions(raw).filter((s) => s.movieId === movieId);
+  filmSessionsCache.set(movieId, { sessions, fetchedAt: now });
+  // Evict expired first, then oldest until under the cap.
+  for (const [key, entry] of filmSessionsCache) {
+    if (Date.now() - entry.fetchedAt >= SHOWTIMES_TTL_MS) filmSessionsCache.delete(key);
   }
+  while (filmSessionsCache.size > SHOWTIMES_CACHE_MAX) {
+    filmSessionsCache.delete(filmSessionsCache.keys().next().value);
+  }
+  return sessions;
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const INT_RE = /^\d+$/;
 
 api.get(
   '/showtimes',
   asyncHandler(async (req, res) => {
-    const { movieId: movieIdRaw, theatreIds: theatreIdsRaw, days: daysRaw } = req.query;
+    const { movieId: movieIdRaw, theatreIds: theatreIdsRaw } = req.query;
 
     if (typeof movieIdRaw !== 'string' || !INT_RE.test(movieIdRaw)) {
       return res.status(400).json({ error: 'movieId must be an integer' });
@@ -101,60 +117,25 @@ api.get(
     if (theatreIds.length > 5) {
       return res.status(400).json({ error: 'at most 5 theatreIds are allowed' });
     }
+    // `days` is gone — the film call already spans the film's whole window.
 
-    let days = 7;
-    if (daysRaw !== undefined) {
-      if (typeof daysRaw !== 'string' || !INT_RE.test(daysRaw)) {
-        return res.status(400).json({ error: 'days must be an integer' });
-      }
-      days = Number(daysRaw);
-      if (days < 1 || days > 14) {
-        return res.status(400).json({ error: 'days must be between 1 and 14' });
-      }
-    }
+    // One national call per film (cached), then filter locally to the
+    // requested theatres and to sessions today onward.
+    const today = todayLocalISO();
+    const wanted = new Set(theatreIds);
+    const allSessions = await getFilmSessions(movieId);
 
-    // The next `days` calendar dates starting today (theatre-local ≈ server-local).
-    const today = new Date();
-    const dates = Array.from({ length: days }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      return toApiDate(d);
-    });
-
-    // Sequential fetch, theatre by theatre, day by day. Cache hits are free;
-    // real Cineplex calls are spaced ~100 ms apart. A failed day is logged and
-    // skipped — a transient upstream error must not 500 the whole preview.
     const sessionsByTheatre = new Map(theatreIds.map((t) => [t, []]));
     const theatreNames = new Map(); // theatreId → name seen in fetched data
-    let fetchedFromCineplex = false;
-
-    for (const theatreId of theatreIds) {
-      for (const date of dates) {
-        const key = `${movieId}:${theatreId}:${date}`;
-        let entry = showtimesCache.get(key);
-        if (!entry || Date.now() - entry.fetchedAt >= SHOWTIMES_TTL_MS) {
-          if (fetchedFromCineplex) await sleep(100);
-          fetchedFromCineplex = true;
-          try {
-            const raw = await getShowtimes({ locationId: theatreId, date, filmId: movieId });
-            const sessions = flattenSessions(raw).filter((s) => s.movieId === movieId);
-            entry = { sessions, fetchedAt: Date.now() };
-            showtimesCache.set(key, entry);
-            pruneShowtimesCache();
-          } catch (err) {
-            console.error(`showtimes fetch failed for ${key}:`, err.message);
-            continue; // skip this day, keep the rest of the preview
-          }
-        }
-        sessionsByTheatre.get(theatreId).push(...entry.sessions);
-        for (const s of entry.sessions) {
-          if (s.theatreName) theatreNames.set(s.theatreId, s.theatreName);
-        }
-      }
+    for (const s of allSessions) {
+      if (s.theatreName) theatreNames.set(s.theatreId, s.theatreName);
+      if (!wanted.has(s.theatreId)) continue;
+      if (s.showStartDateTime.slice(0, 10) < today) continue; // upcoming only
+      sessionsByTheatre.get(s.theatreId).push(s);
     }
 
-    // A theatre with zero sessions never told us its name — fall back to the
-    // (cached) national theatre list, then to the bare id.
+    // A requested theatre with zero sessions never told us its name — fall
+    // back to the (cached) national theatre list, then to the bare id.
     if (theatreIds.some((t) => !theatreNames.has(t))) {
       try {
         const all = await cached(theatresCache, THEATRES_TTL_MS, getTheatres);
