@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { formatWindow } from './timeWindow.js';
+import ShowtimesPanel from './ShowtimesPanel.jsx';
 
 // Trivial sanity check on top of the browser's type="email" validation.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function EmailStep({ movie, theatres, onBack, onSubmit, submitting, apiError }) {
+export default function EmailStep({ movie, theatres, timeWindow, onBack, onSubmit, submitting, apiError }) {
   const [email, setEmail] = useState('');
   const [localError, setLocalError] = useState(null);
 
@@ -26,10 +28,33 @@ export default function EmailStep({ movie, theatres, onBack, onSubmit, submittin
 
       <dl className="summary">
         <dt>Movie</dt>
-        <dd>{movie.name}</dd>
+        <dd>
+          {movie.name}
+          {movie.detailPageUrl && (
+            <>
+              {' '}
+              <a
+                className="out-link"
+                href={movie.detailPageUrl}
+                target="_blank"
+                rel="noopener"
+              >
+                View on Cineplex ↗
+              </a>
+            </>
+          )}
+        </dd>
         <dt>Theatres ({theatres.length})</dt>
         <dd>{theatres.map((t) => t.name).join(' · ')}</dd>
+        <dt>Showtime window</dt>
+        <dd>{formatWindow(timeWindow)}</dd>
       </dl>
+
+      <ShowtimesPanel
+        movie={movie}
+        theatreIds={theatres.map((t) => t.theatreId)}
+        timeWindow={timeWindow}
+      />
 
       <form className="email-form" onSubmit={handleSubmit} noValidate>
         <label htmlFor="email">Email address</label>

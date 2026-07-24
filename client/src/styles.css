@@ -1,17 +1,28 @@
-/* [WS3: client-ui] Single stylesheet for the subscribe flow. */
+/* [WS3: client-ui] Single stylesheet for the subscribe flow.
+   Direction: dark auditorium + marquee amber. The signature element is the
+   ticket-stub primary button (punched notches + perforation line); everything
+   else stays quiet around it. */
 
 :root {
-  --bg: #0f1117;
-  --panel: #181b24;
-  --panel-2: #1f2330;
-  --border: #2c3140;
-  --text: #f2f4f8;
-  --muted: #9aa3b5;
-  --accent: #2f7bff;
-  --accent-hover: #4b8dff;
+  --bg: #0b0a12;
+  --panel: #14121d;
+  --panel-2: #1d1a2a;
+  --border: #2b2740;
+  --border-strong: #3d3757;
+  --text: #f4f1e6;
+  --muted: #a29bb2;
+  --gold: #f0b43c;
+  --gold-hi: #ffd069;
+  --amber-deep: #d97b26;
+  --ink-on-gold: #241503;
+  --glow: rgba(240, 180, 60, 0.28);
+  --glow-soft: rgba(240, 180, 60, 0.14);
   --danger: #ff5a5f;
-  --success: #2fbf71;
-  --radius: 10px;
+  --success: #35c98a;
+  --radius: 12px;
+  --font-display: 'Futura', 'Avenir Next', 'Century Gothic', 'Trebuchet MS',
+    system-ui, sans-serif;
+  color-scheme: dark;
 }
 
 * {
@@ -20,7 +31,9 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 500px at 50% -120px, var(--glow-soft), transparent 70%),
+    var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
@@ -33,12 +46,28 @@ body {
 }
 
 .app-header h1 {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
   margin: 0 0 0.25rem;
 }
 
+.app-header h1::after {
+  /* small marquee underline */
+  content: '';
+  display: block;
+  width: 3.5rem;
+  height: 3px;
+  margin-top: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-hi), var(--amber-deep));
+  box-shadow: 0 0 10px var(--glow);
+}
+
 .app-header p {
-  margin: 0 0 1.5rem;
+  margin: 0.75rem 0 1.5rem;
   color: var(--muted);
 }
 
@@ -46,13 +75,14 @@ body {
 .steps {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  margin: 0 0 1.5rem;
+  padding: 0;
   flex-wrap: wrap;
 }
 
 .steps li {
   list-style: none;
-  padding: 0.3rem 0.75rem;
+  padding: 0.3rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   font-size: 0.85rem;
@@ -61,9 +91,10 @@ body {
 }
 
 .steps li.active {
-  border-color: var(--accent);
-  color: var(--text);
-  background: rgba(47, 123, 255, 0.12);
+  border-color: var(--gold);
+  color: var(--gold-hi);
+  background: var(--glow-soft);
+  box-shadow: 0 0 12px var(--glow-soft);
 }
 
 .steps li.done {
@@ -71,13 +102,11 @@ body {
   color: var(--success);
 }
 
-.steps {
-  padding: 0;
-  margin-top: 0;
-}
-
 h2 {
-  font-size: 1.2rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   margin: 0 0 1rem;
 }
 
@@ -92,38 +121,150 @@ h2 {
   font-size: 1rem;
 }
 
-.text-input:focus {
-  outline: 2px solid var(--accent);
+.text-input:focus-visible {
+  outline: 2px solid var(--gold-hi);
   outline-offset: 1px;
 }
 
+/* ---------------------------------------------------------------- buttons
+   Three tiers, all pills:
+   .btn          — quiet outlined secondary (nav, back)
+   .btn.chip-btn — small selection chip; .selected fills with amber
+   .btn-primary  — the ticket stub: amber gradient, punched notches either
+                   side and a perforation line before the stub end. */
+
 .btn {
-  padding: 0.6rem 1.2rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--panel-2);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5ch;
+  padding: 0.6rem 1.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
   color: var(--text);
+  font: inherit;
   font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    filter 140ms ease,
+    transform 90ms ease;
 }
 
 .btn:hover {
-  border-color: var(--muted);
+  border-color: var(--gold);
+  color: var(--gold-hi);
+  box-shadow: 0 0 14px var(--glow-soft);
 }
 
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
+.btn:focus-visible {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 3px;
 }
 
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+/* Selection chips (movie filter tabs, time-window presets) */
+.btn.chip-btn {
+  padding: 0.45rem 0.95rem;
+  font-size: 0.85rem;
+}
+
+.btn.chip-btn.selected {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+  color: var(--ink-on-gold);
+  box-shadow: 0 0 12px var(--glow);
+}
+
+.btn.chip-btn.selected:hover {
+  color: var(--ink-on-gold);
+  filter: brightness(1.06);
+}
+
+/* Ticket-stub primary */
+.btn-primary {
+  --stub-cut: var(--bg); /* override where the button sits on a panel */
+  border: none;
+  color: var(--ink-on-gold);
+  font-weight: 700;
+  padding: 0.65rem 2.1rem 0.65rem 1.5rem;
+  background-image:
+    /* perforation line before the stub end */
+    repeating-linear-gradient(
+      to bottom,
+      rgba(70, 40, 6, 0.55) 0 4px,
+      rgba(70, 40, 6, 0) 4px 8px
+    ),
+    linear-gradient(115deg, var(--gold-hi), var(--gold) 55%, var(--amber-deep));
+  background-size: 1px calc(100% - 12px), 100% 100%;
+  background-position: calc(100% - 1.15rem) 6px, 0 0;
+  background-repeat: no-repeat;
+  box-shadow:
+    0 0 18px var(--glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn-primary::before,
+.btn-primary::after {
+  /* punched semicircle notches */
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--stub-cut);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.btn-primary::before {
+  left: -6px;
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary::after {
+  right: -6px;
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary:hover {
+  color: var(--ink-on-gold);
+  filter: brightness(1.07);
+  box-shadow:
+    0 0 26px var(--glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn-primary:active {
+  filter: brightness(0.97);
+}
+
+.btn-primary:disabled {
+  opacity: 1;
+  color: rgba(36, 21, 3, 0.6);
+  filter: saturate(0.35) brightness(0.7);
+  box-shadow: none;
 }
 
 .toolbar {
@@ -140,17 +281,7 @@ h2 {
 .filter-tabs {
   display: flex;
   gap: 0.4rem;
-}
-
-.filter-tabs .btn {
-  padding: 0.5rem 0.85rem;
-  font-size: 0.85rem;
-}
-
-.filter-tabs .btn.selected {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  flex-wrap: wrap;
 }
 
 /* Movie grid */
@@ -169,15 +300,29 @@ h2 {
   border-radius: var(--radius);
   background: var(--panel);
   color: var(--text);
+  font: inherit;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 120ms ease, transform 120ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .movie-card:hover,
 .movie-card:focus-visible {
-  border-color: var(--accent);
-  transform: translateY(-2px);
+  border-color: var(--gold);
+  box-shadow: 0 0 18px var(--glow-soft), 0 8px 20px rgba(0, 0, 0, 0.45);
+  transform: translateY(-3px);
+}
+
+.movie-card:focus-visible {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 2px;
+}
+
+.movie-card:active {
+  transform: translateY(-1px);
 }
 
 .movie-card img {
@@ -216,13 +361,13 @@ h2 {
 }
 
 .badge.now-playing {
-  background: rgba(47, 191, 113, 0.15);
+  background: rgba(53, 201, 138, 0.15);
   color: var(--success);
 }
 
 .badge.coming-soon {
-  background: rgba(47, 123, 255, 0.15);
-  color: var(--accent-hover);
+  background: var(--glow-soft);
+  color: var(--gold-hi);
 }
 
 /* Theatre list */
@@ -239,26 +384,35 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.3rem 0.4rem 0.3rem 0.75rem;
-  background: rgba(47, 123, 255, 0.15);
-  border: 1px solid var(--accent);
+  padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+  background: var(--glow-soft);
+  border: 1px solid var(--gold);
   border-radius: 999px;
   font-size: 0.85rem;
+  color: var(--text);
+  box-shadow: 0 0 10px var(--glow-soft);
 }
 
 .chip button {
   border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--gold-hi);
+  font: inherit;
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0.15rem 0.35rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 50%;
 }
 
 .chip button:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(240, 180, 60, 0.25);
+  color: var(--text);
+}
+
+.chip button:focus-visible {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 1px;
 }
 
 .theatre-list {
@@ -286,8 +440,13 @@ h2 {
   background: var(--panel-2);
 }
 
+.theatre-row:has(input:focus-visible) {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: -2px;
+}
+
 .theatre-row input {
-  accent-color: var(--accent);
+  accent-color: var(--gold);
   width: 1.05rem;
   height: 1.05rem;
   flex-shrink: 0;
@@ -300,6 +459,217 @@ h2 {
 .theatre-row .theatre-city {
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+/* Time-of-day window */
+.time-window {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 1rem 1.1rem 0.9rem;
+  margin: 1.25rem 0 0;
+}
+
+.time-window legend {
+  padding: 0 0.5rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.custom-times {
+  display: flex;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.custom-times label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.custom-times .text-input {
+  width: auto;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.custom-times .hint {
+  flex-basis: 100%;
+}
+
+.time-window-readout {
+  margin: 0.9rem 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.time-window-readout strong {
+  color: var(--gold-hi);
+  font-weight: 600;
+}
+
+/* Showtimes preview panel */
+.showtimes-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+
+.showtimes-panel h3 {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.2rem;
+  color: var(--gold-hi);
+}
+
+.showtimes-panel > .hint {
+  margin-bottom: 0.75rem;
+}
+
+.showtimes-scroll {
+  max-height: 16rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.showtimes-theatre h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0.9rem 0 0.4rem;
+}
+
+.showtimes-theatre:first-child h4 {
+  margin-top: 0;
+}
+
+.showtimes-theatre .empty {
+  padding: 0.25rem 0 0.5rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.showtimes-day {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  margin-bottom: 0.55rem;
+}
+
+.showtimes-date {
+  flex: 0 0 5.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.session-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Session chips: little tickets, consistent with the button system */
+.session {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.session:hover,
+.session:focus-visible {
+  border-color: var(--gold);
+  box-shadow: 0 0 12px var(--glow-soft);
+}
+
+.session:focus-visible {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 2px;
+}
+
+.session .session-time {
+  font-weight: 600;
+}
+
+.session .session-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.session .session-flag {
+  font-size: 0.7rem;
+  padding: 0.05rem 0.4rem;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background: rgba(255, 90, 95, 0.15);
+  color: var(--danger);
+}
+
+.session.outside-window {
+  opacity: 0.55;
+}
+
+.session.outside-window .session-flag {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px dashed var(--border-strong);
+}
+
+.session.sold-out .session-time {
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+}
+
+/* External links (movie detail page) */
+.out-link {
+  color: var(--gold-hi);
+  font-size: 0.85rem;
+  text-decoration: none;
+  border-bottom: 1px dotted var(--gold);
+}
+
+.out-link:hover {
+  color: var(--text);
+  border-bottom-style: solid;
+}
+
+.out-link:focus-visible {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Email step / summary */
@@ -379,6 +749,10 @@ h2 {
   max-width: 560px;
 }
 
+.success .btn-primary {
+  --stub-cut: var(--panel);
+}
+
 .success h2 {
   color: var(--success);
 }
@@ -404,5 +778,26 @@ h2 {
 
   .step-nav .btn {
     flex: 1 1 auto;
+  }
+
+  .custom-times label {
+    flex: 1 1 40%;
+  }
+
+  .showtimes-day {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+
+  .movie-card:hover,
+  .movie-card:focus-visible,
+  .btn:active {
+    transform: none;
   }
 }

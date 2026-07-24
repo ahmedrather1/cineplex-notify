@@ -6,6 +6,9 @@ import { fetchMovies, fetchTheatres, createSubscription } from './api.js';
 import MovieStep from './MovieStep.jsx';
 import TheatreStep from './TheatreStep.jsx';
 import EmailStep from './EmailStep.jsx';
+import { formatWindow } from './timeWindow.js';
+
+const ANY_TIME = { preset: 'any', timeStart: '', timeEnd: '' };
 
 const STEPS = ['Movie', 'Theatres', 'Email'];
 
@@ -20,6 +23,7 @@ export default function App() {
 
   const [movie, setMovie] = useState(null);
   const [theatreIds, setTheatreIds] = useState([]);
+  const [timeWindow, setTimeWindow] = useState(ANY_TIME);
 
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -57,6 +61,8 @@ export default function App() {
         movieId: movie.id,
         movieName: movie.name,
         theatreIds,
+        timeStart: timeWindow.timeStart || undefined,
+        timeEnd: timeWindow.timeEnd || undefined,
       });
       setConfirmedEmail(email);
       setStep(3);
@@ -71,6 +77,7 @@ export default function App() {
     setStep(0);
     setMovie(null);
     setTheatreIds([]);
+    setTimeWindow(ANY_TIME);
     setApiError(null);
     setConfirmedEmail(null);
   }
@@ -109,6 +116,8 @@ export default function App() {
         theatres={theatres}
         selectedIds={theatreIds}
         onToggle={toggleTheatre}
+        timeWindow={timeWindow}
+        onTimeWindowChange={setTimeWindow}
         onBack={() => setStep(0)}
         onNext={() => {
           setApiError(null);
@@ -121,6 +130,7 @@ export default function App() {
       <EmailStep
         movie={movie}
         theatres={selectedTheatres}
+        timeWindow={timeWindow}
         onBack={() => setStep(1)}
         onSubmit={submit}
         submitting={submitting}
@@ -142,6 +152,9 @@ export default function App() {
             </li>
           ))}
         </ul>
+        <p>
+          Showtime window: <strong>{formatWindow(timeWindow)}</strong>
+        </p>
         <p className="fine-print">
           Every email we send includes an unsubscribe link, so you can stop the
           alerts at any time.
