@@ -622,11 +622,28 @@ h2 {
 }
 
 .showtimes-date {
-  flex: 0 0 5.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  flex: 0 0 6rem;
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+
+/* Advance-showing tag on far-future date headers (> ~30 days out). */
+.advance-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  color: var(--ink-on-gold);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+  box-shadow: 0 0 8px var(--glow-soft);
 }
 
 /* Uniform grid of equal-size session cards. */

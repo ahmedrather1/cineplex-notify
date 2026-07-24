@@ -67,9 +67,11 @@ const theatres = [
 ];
 
 // --- GET /api/showtimes fixtures --------------------------------------
-// A few sessions across two days (incl. one sold-out); theatre 1416
-// (Scotiabank Theatre Toronto) always returns empty sessions so the
-// client's empty state is exercisable.
+// Returns ALL upcoming sessions for the movie (no `days` param): near-term
+// for now-playing films, and far-future advance dates for coming-soon films
+// so the client's Advance badge + far-date headers are exercisable. Theatre
+// 1416 (Scotiabank Theatre Toronto) always returns empty sessions so the
+// empty state is exercisable.
 const EMPTY_SESSIONS_THEATRE = 1416;
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -80,16 +82,29 @@ function dateStr(offsetDays) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function sessionsFor(theatreId) {
+// Now-playing plan: sessions over the next couple of days.
+const NOW_PLAYING_PLAN = [
+  // [dayOffset, 'HH:MM', experienceTypes, auditorium, isSoldOut]
+  [1, '13:05', ['Regular'], 'Auditorium 3', false],
+  [1, '18:45', ['IMAX'], 'Auditorium 1', true],
+  [1, '21:30', ['Regular'], 'Auditorium 5', false],
+  [2, '16:10', ['UltraAVX'], 'Auditorium 7', false],
+  [2, '23:50', ['Regular'], 'Auditorium 5', false],
+];
+
+// Coming-soon plan: only far-future advance dates (all > 30 days out; the
+// last crosses into next year to exercise the year-in-header path).
+const ADVANCE_PLAN = [
+  [146, '18:30', ['IMAX'], 'Auditorium 1', false],
+  [146, '21:45', ['70mm'], 'Auditorium 2', false],
+  [147, '19:00', ['UltraAVX'], 'Auditorium 1', false],
+  [250, '20:00', ['IMAX'], 'Auditorium 1', false],
+];
+
+function sessionsFor(movieId, theatreId) {
   if (theatreId === EMPTY_SESSIONS_THEATRE) return [];
-  const plan = [
-    // [dayOffset, 'HH:MM', experienceTypes, auditorium, isSoldOut]
-    [1, '13:05', ['Regular'], 'Auditorium 3', false],
-    [1, '18:45', ['IMAX'], 'Auditorium 1', true],
-    [1, '21:30', ['Regular'], 'Auditorium 5', false],
-    [2, '16:10', ['UltraAVX'], 'Auditorium 7', false],
-    [2, '23:50', ['Regular'], 'Auditorium 5', false],
-  ];
+  const movie = movies.find((m) => m.id === movieId);
+  const plan = movie && movie.isComingSoon ? ADVANCE_PLAN : NOW_PLAYING_PLAN;
   return plan.map(([offset, hhmm, experienceTypes, auditorium, isSoldOut], i) => {
     const sessionId = theatreId * 1000 + i;
     return {
@@ -108,20 +123,17 @@ function handleShowtimes(url, res) {
   const movieId = Number(params.get('movieId'));
   const rawIds = params.get('theatreIds') || '';
   const theatreIds = rawIds === '' ? [] : rawIds.split(',').map((s) => Number(s.trim()));
-  const days = params.has('days') ? Number(params.get('days')) : 7;
 
+  // No `days` param anymore — the film call spans the whole window.
   const bad =
     !Number.isInteger(movieId) ||
     movieId <= 0 ||
     theatreIds.length === 0 ||
     theatreIds.length > 5 ||
-    theatreIds.some((n) => !Number.isInteger(n) || n <= 0) ||
-    !Number.isInteger(days) ||
-    days < 1 ||
-    days > 14;
+    theatreIds.some((n) => !Number.isInteger(n) || n <= 0);
   if (bad) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'movieId, theatreIds (1-5 comma-separated ints) and days (1-14) are required' }));
+    res.end(JSON.stringify({ error: 'movieId and theatreIds (1-5 comma-separated ints) are required' }));
     return;
   }
 
@@ -129,7 +141,7 @@ function handleShowtimes(url, res) {
     theatreId,
     theatreName:
       theatres.find((t) => t.theatreId === theatreId)?.name || `Theatre ${theatreId}`,
-    sessions: sessionsFor(theatreId),
+    sessions: sessionsFor(movieId, theatreId),
   }));
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));

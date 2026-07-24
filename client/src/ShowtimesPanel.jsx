@@ -12,26 +12,40 @@ import { fetchShowtimes } from './api.js';
 import { formatTime, matchesAny } from './timeWindow.js';
 import { isDateInRange } from './dateRange.js';
 
-/** '2026-07-24T18:45:00' → { dateLabel: 'Fri, Jul 24', hhmm: '18:45' } */
+// Sessions can now span months out (advance/coming-soon dates), so anything
+// more than ADVANCE_DAYS away is tagged. Computed once per render.
+const ADVANCE_DAYS = 30;
+
+/**
+ * '2026-07-24T18:45:00' → { dateLabel: 'Fri, Jul 24', iso: '2026-07-24',
+ * hhmm: '18:45' }. The year is appended only when it isn't the current year,
+ * so far-future advance dates read unambiguously.
+ */
 function splitLocal(showStartDateTime) {
   const [date, time = ''] = showStartDateTime.split('T');
   const [y, mo, d] = date.split('-').map(Number);
+  const opts = { weekday: 'short', month: 'short', day: 'numeric' };
+  if (y !== new Date().getFullYear()) opts.year = 'numeric';
   // Construct from components (local, no TZ shift) purely to name the weekday.
-  const label = new Date(y, mo - 1, d).toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-  return { dateLabel: label, hhmm: time.slice(0, 5) };
+  const label = new Date(y, mo - 1, d).toLocaleDateString(undefined, opts);
+  return { dateLabel: label, iso: date, hhmm: time.slice(0, 5) };
 }
 
-function groupByDate(sessions) {
+/** ISO 'YYYY-MM-DD' of the cutoff beyond which a date counts as "advance". */
+function advanceCutoffISO() {
+  const now = new Date();
+  const c = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ADVANCE_DAYS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${c.getFullYear()}-${pad(c.getMonth() + 1)}-${pad(c.getDate())}`;
+}
+
+function groupByDate(sessions, cutoffISO) {
   const groups = [];
   for (const s of sessions) {
-    const { dateLabel, hhmm } = splitLocal(s.showStartDateTime);
+    const { dateLabel, iso, hhmm } = splitLocal(s.showStartDateTime);
     let g = groups[groups.length - 1];
     if (!g || g.dateLabel !== dateLabel) {
-      g = { dateLabel, sessions: [] };
+      g = { dateLabel, advance: iso > cutoffISO, sessions: [] };
       groups.push(g);
     }
     g.sessions.push({ ...s, hhmm });
@@ -105,7 +119,10 @@ export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movie.id, idsKey, retryKey]);
 
+  // totalSessions counts every session, advance dates included, so the
+  // collapsed header count reflects the full upcoming window.
   const totalSessions = data ? data.reduce((n, t) => n + t.sessions.length, 0) : 0;
+  const cutoffISO = advanceCutoffISO();
 
   let headerSummary;
   if (error) headerSummary = 'unavailable';
@@ -144,9 +161,12 @@ export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRan
             {t.sessions.length === 0 ? (
               <p className="empty">No showtimes released yet at this theatre.</p>
             ) : (
-              groupByDate(t.sessions).map((g) => (
+              groupByDate(t.sessions, cutoffISO).map((g) => (
                 <div key={g.dateLabel} className="showtimes-day">
-                  <span className="showtimes-date">{g.dateLabel}</span>
+                  <span className="showtimes-date">
+                    {g.dateLabel}
+                    {g.advance && <span className="advance-badge">Advance</span>}
+                  </span>
                   <ul className="session-list">
                     {g.sessions.map((s) => (
                       <li key={s.sessionId}>

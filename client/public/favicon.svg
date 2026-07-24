@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Popcorn">
+  <!-- Cineplex-flavored popcorn tub: red/cream striped box with kernels
+       popping over the rim. Palette echoes the app's marquee amber. -->
+  <defs>
+    <linearGradient id="kernel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf4"/>
+      <stop offset="1" stop-color="#f0d79a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- popped kernels over the rim -->
+  <g fill="url(#kernel)" stroke="#e6c47e" stroke-width="0.6">
+    <circle cx="20" cy="20" r="5"/>
+    <circle cx="24.5" cy="15.5" r="4.2"/>
+    <circle cx="32" cy="12.5" r="5.4"/>
+    <circle cx="39.5" cy="15" r="4.4"/>
+    <circle cx="44" cy="20" r="5"/>
+    <circle cx="29" cy="18.5" r="4.6"/>
+    <circle cx="36" cy="19" r="4.4"/>
+  </g>
+  <!-- amber butter glints -->
+  <g fill="#f0b43c" opacity="0.85">
+    <circle cx="24.5" cy="15.5" r="1.5"/>
+    <circle cx="39.5" cy="15" r="1.5"/>
+    <circle cx="32" cy="12.5" r="1.8"/>
+  </g>
+
+  <!-- tub: trapezoid, narrower at the base -->
+  <path d="M15 24 H49 L45 58 H19 Z" fill="#f4f1e6"/>
+  <!-- red stripes -->
+  <g fill="#d7263d">
+    <path d="M15 24 H23 L20.7 58 H19 Z"/>
+    <path d="M28.2 24 H35.8 L35.3 58 H28.7 Z"/>
+    <path d="M41 24 H49 L45 58 H43.3 Z"/>
+  </g>
+  <!-- rim band -->
+  <path d="M13.5 22.5 H50.5 A1.5 1.5 0 0 1 50.5 25.5 H13.5 A1.5 1.5 0 0 1 13.5 22.5 Z" fill="#a81a2e"/>
+</svg>
