@@ -196,25 +196,54 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // 'HH:MM' 24h clock, zero-padded (e.g. '09:00', '21:30').
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+const MAX_TIME_WINDOWS = 6;
+
 /**
- * Normalize an optional 'HH:MM' time-of-day bound from the request body.
- * Absent/empty string → null; valid 'HH:MM' → itself; anything else → error.
- * (timeStart > timeEnd is deliberately allowed: overnight wrap, e.g. 21:00–02:00.)
+ * Validate + normalize the optional `timeWindows` array: up to 6 windows of
+ * { start?, end? }, each bound an 'HH:MM' 24h string when present (empty
+ * string = absent bound). A showtime matches if it falls in ANY window;
+ * omitted/empty array = any time. Returns { value: [{ start, end }] } with
+ * nulls for absent bounds, or { error }. start > end is deliberately allowed
+ * (overnight wrap, e.g. 21:00–02:00); a window with neither bound is rejected.
  */
-function parseTimeBound(value, field) {
-  if (value === undefined || value === null || value === '') return { value: null };
-  if (typeof value !== 'string' || !TIME_RE.test(value)) {
-    return { error: `${field} must be an 'HH:MM' 24-hour time (e.g. '21:30')` };
+function parseTimeWindows(value) {
+  if (value === undefined || value === null) return { value: [] };
+  if (!Array.isArray(value)) {
+    return { error: 'timeWindows must be an array of { start?, end? } windows' };
   }
-  return { value };
+  if (value.length > MAX_TIME_WINDOWS) {
+    return { error: `timeWindows may contain at most ${MAX_TIME_WINDOWS} windows` };
+  }
+  const windows = [];
+  for (const [i, w] of value.entries()) {
+    if (typeof w !== 'object' || w === null || Array.isArray(w)) {
+      return { error: `timeWindows[${i}] must be an object with optional start/end` };
+    }
+    const bounds = { start: null, end: null };
+    for (const field of ['start', 'end']) {
+      const v = w[field];
+      if (v === undefined || v === null || v === '') continue; // absent bound
+      if (typeof v !== 'string' || !TIME_RE.test(v)) {
+        return {
+          error: `timeWindows[${i}].${field} must be an 'HH:MM' 24-hour time (e.g. '21:30')`,
+        };
+      }
+      bounds[field] = v;
+    }
+    if (bounds.start === null && bounds.end === null) {
+      return { error: `timeWindows[${i}] must have at least one of start or end` };
+    }
+    windows.push(bounds);
+  }
+  return { value: windows };
 }
 
 // POST /api/subscriptions —
-// { email, movieId, movieName, theatreIds, timeStart?, timeEnd? } → 201 { id }.
+// { email, movieId, movieName, theatreIds, timeWindows? } → 201 { id }.
 api.post(
   '/subscriptions',
   asyncHandler(async (req, res) => {
-    const { email, movieId, movieName, theatreIds, timeStart, timeEnd } = req.body ?? {};
+    const { email, movieId, movieName, theatreIds, timeWindows } = req.body ?? {};
 
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: 'a valid email is required' });
@@ -235,19 +264,16 @@ api.post(
         .json({ error: 'theatreIds must be a non-empty array of integers' });
     }
 
-    // Optional time-of-day window bounds — each independently optional.
-    const start = parseTimeBound(timeStart, 'timeStart');
-    if (start.error) return res.status(400).json({ error: start.error });
-    const end = parseTimeBound(timeEnd, 'timeEnd');
-    if (end.error) return res.status(400).json({ error: end.error });
+    // Optional time-of-day windows (match ANY; empty = any time).
+    const windows = parseTimeWindows(timeWindows);
+    if (windows.error) return res.status(400).json({ error: windows.error });
 
     const id = await createSubscription({
       email: email.trim(),
       movieId,
       movieName: movieName.trim(),
       theatreIds: [...new Set(theatreIds)],
-      timeStart: start.value,
-      timeEnd: end.value,
+      timeWindows: windows.value,
     });
     res.status(201).json({ id });
   })
