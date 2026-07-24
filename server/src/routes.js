@@ -8,6 +8,7 @@ import {
   getTheatres,
   getFilmShowtimes,
   flattenSessions,
+  SELECTABLE_FORMATS,
 } from './cineplex.js';
 import { createSubscription, deleteSubscription } from './db.js';
 
@@ -243,14 +244,48 @@ function todayLocalISO() {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+const FORMATS_SET = new Set(SELECTABLE_FORMATS);
+
+/**
+ * Validate + normalize the optional `formats` array: each entry must be one of
+ * the canonical SELECTABLE_FORMATS (trimmed, case-sensitive since the UI sends
+ * canonical values). Absent/null → []; empty array = any format. Deduped.
+ * Returns { value: string[] } or { error }.
+ */
+function parseFormats(value) {
+  if (value === undefined || value === null) return { value: [] };
+  if (!Array.isArray(value)) {
+    return { error: `formats must be an array of: ${SELECTABLE_FORMATS.join(', ')}` };
+  }
+  const out = [];
+  for (const raw of value) {
+    const f = typeof raw === 'string' ? raw.trim() : raw;
+    if (typeof f !== 'string' || !FORMATS_SET.has(f)) {
+      return {
+        error: `formats contains an invalid value ${JSON.stringify(raw)}; allowed: ${SELECTABLE_FORMATS.join(', ')}`,
+      };
+    }
+    out.push(f);
+  }
+  return { value: [...new Set(out)] };
+}
+
 // POST /api/subscriptions —
-// { email, movieId, movieName, theatreIds, timeWindows?, dateStart?, dateEnd? }
+// { email, movieId, movieName, theatreIds, timeWindows?, dateStart?, dateEnd?, formats? }
 // → 201 { id }.
 api.post(
   '/subscriptions',
   asyncHandler(async (req, res) => {
-    const { email, movieId, movieName, theatreIds, timeWindows, dateStart, dateEnd } =
-      req.body ?? {};
+    const {
+      email,
+      movieId,
+      movieName,
+      theatreIds,
+      timeWindows,
+      dateStart,
+      dateEnd,
+      formats,
+    } = req.body ?? {};
 
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: 'a valid email is required' });
@@ -289,6 +324,10 @@ api.post(
       return res.status(400).json({ error: 'dateEnd is in the past' });
     }
 
+    // Optional viewing-format filter (match ANY; empty = any format).
+    const fmts = parseFormats(formats);
+    if (fmts.error) return res.status(400).json({ error: fmts.error });
+
     const id = await createSubscription({
       email: email.trim(),
       movieId,
@@ -297,6 +336,7 @@ api.post(
       timeWindows: windows.value,
       dateStart: dStart.value,
       dateEnd: dEnd.value,
+      formats: fmts.value,
     });
     res.status(201).json({ id });
   })
