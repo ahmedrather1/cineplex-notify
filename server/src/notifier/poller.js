@@ -1,20 +1,149 @@
 // [WS2: poller-notifier] — see docs/workstreams/02-poller-notifier.md
-// Owns this file and mailer.js. Semantics in docs/architecture.md §Poller.
+// Semantics in docs/architecture.md §Poller. Owns this file and mailer.js.
+
+import 'dotenv/config'; // no-op when index.js already loaded it; enables standalone runs
+import cron from 'node-cron';
+import { getShowtimes, flattenSessions, toApiDate } from '../cineplex.js';
+import {
+  listSubscriptions,
+  getSeenSessionKeys,
+  markSessionsSeen,
+  markSeeded,
+} from '../db.js';
+import { sendNewShowingsEmail } from './mailer.js';
+
+const REQUEST_DELAY_MS = 200; // politeness gap between Cineplex requests
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const pairKey = (movieId, theatreId) => `${movieId}:${theatreId}`;
 
 /**
- * TODO(WS2): implement.
- * - node-cron every POLL_INTERVAL_MINUTES (default 30)
- * - group fetches by distinct (movieId, theatreId) across subscriptions;
- *   cineplex.getShowtimes per day for POLL_LOOKAHEAD_DAYS (default 30), flattenSessions()
- * - per subscription: diff vs db.getSeenSessionKeys(); if !seeded, seed silently
- * - new sessions → one digest email via mailer.js, then markSessionsSeen
- * - overlap guard: skip a tick if the previous one is still running
+ * Fetch + flatten showtimes for every distinct (movieId, theatreId) pair,
+ * one request per day for `lookaheadDays`, sequential with a polite delay.
+ * @returns {Map<string, Array>} pairKey → flattened sessions for that pair
  */
-export function startPoller() {
-  console.log('[poller] not implemented yet (WS2) — no polling will occur');
+async function fetchSessionsByPair(pairs, lookaheadDays) {
+  const sessionsByPair = new Map();
+  const today = new Date();
+  let first = true;
+
+  for (const { movieId, theatreId } of pairs) {
+    const key = pairKey(movieId, theatreId);
+    const sessions = [];
+    for (let offset = 0; offset < lookaheadDays; offset++) {
+      if (!first) await sleep(REQUEST_DELAY_MS);
+      first = false;
+      const date = new Date(today);
+      date.setDate(date.getDate() + offset);
+      try {
+        const raw = await getShowtimes({
+          locationId: theatreId,
+          date: toApiDate(date),
+          filmId: movieId,
+        });
+        // filmId already filters server-side; keep the guard in case it's ignored.
+        sessions.push(
+          ...flattenSessions(raw).filter((s) => s.movieId === movieId)
+        );
+      } catch (err) {
+        // One bad day/pair must not sink the whole poll pass.
+        console.error(
+          `[poller] showtimes fetch failed (theatre ${theatreId}, film ${movieId}, ${toApiDate(date)}): ${err.message}`
+        );
+      }
+    }
+    sessionsByPair.set(key, sessions);
+  }
+  return sessionsByPair;
 }
 
-/** TODO(WS2): single poll pass, exported separately so it can be run manually/tested. */
+/**
+ * Single poll pass: fetch showtimes grouped by distinct (movieId, theatreId),
+ * diff per subscription against seen_sessions, seed silently on first pass,
+ * otherwise email one digest per subscription and only then mark seen.
+ */
 export async function pollOnce() {
-  throw new Error('not implemented (WS2)');
+  const lookaheadDays = Number(process.env.POLL_LOOKAHEAD_DAYS || 30);
+  const subs = await listSubscriptions();
+  if (subs.length === 0) {
+    console.log('[poller] no subscriptions — nothing to poll');
+    return;
+  }
+
+  // Distinct (movieId, theatreId) pairs so N subscribers to the same
+  // movie/theatre cost one set of Cineplex requests.
+  const pairs = new Map();
+  for (const sub of subs) {
+    for (const theatreId of sub.theatreIds) {
+      pairs.set(pairKey(sub.movieId, theatreId), { movieId: sub.movieId, theatreId });
+    }
+  }
+
+  console.log(
+    `[poller] polling ${pairs.size} (movie, theatre) pair(s) for ${subs.length} subscription(s), ${lookaheadDays} day(s) ahead`
+  );
+  const sessionsByPair = await fetchSessionsByPair(pairs.values(), lookaheadDays);
+
+  for (const sub of subs) {
+    try {
+      // Dedupe by (theatreId, sessionId): the API sometimes lists the same
+      // session under multiple experience blocks.
+      const byKey = new Map();
+      for (const theatreId of sub.theatreIds) {
+        for (const s of sessionsByPair.get(pairKey(sub.movieId, theatreId)) ?? []) {
+          if (!byKey.has(`${s.theatreId}:${s.sessionId}`)) {
+            byKey.set(`${s.theatreId}:${s.sessionId}`, s);
+          }
+        }
+      }
+      const sessions = [...byKey.values()];
+
+      if (!sub.seeded) {
+        // First pass: everything that already exists isn't "new" — seed silently.
+        await markSessionsSeen(sub.id, sessions);
+        await markSeeded(sub.id);
+        console.log(`[poller] seeded ${sub.id} with ${sessions.length} session(s), no email`);
+        continue;
+      }
+
+      const seen = await getSeenSessionKeys(sub.id);
+      const fresh = sessions.filter((s) => !seen.has(`${s.theatreId}:${s.sessionId}`));
+      if (fresh.length === 0) continue;
+
+      // Send first, mark seen only after the send resolves: at-least-once
+      // delivery is acceptable; silently losing notifications is not.
+      await sendNewShowingsEmail(sub, fresh);
+      await markSessionsSeen(sub.id, fresh);
+      console.log(`[poller] emailed ${sub.email} about ${fresh.length} new session(s) (${sub.id})`);
+    } catch (err) {
+      // One bad subscription (e.g. rejected email address) must not break the run.
+      console.error(`[poller] subscription ${sub.id} failed: ${err.message}`);
+    }
+  }
+}
+
+let isRunning = false;
+
+async function guardedPoll() {
+  if (isRunning) {
+    console.log('[poller] previous pass still running — skipping this tick');
+    return;
+  }
+  isRunning = true;
+  try {
+    await pollOnce();
+  } catch (err) {
+    console.error(`[poller] pass failed: ${err.message}`);
+  } finally {
+    isRunning = false;
+  }
+}
+
+/** Start the in-process cron poller (every POLL_INTERVAL_MINUTES) with a boot kick-off. */
+export function startPoller() {
+  const minutes = Math.min(59, Math.max(1, Number(process.env.POLL_INTERVAL_MINUTES || 30)));
+  cron.schedule(`*/${minutes} * * * *`, guardedPoll);
+  console.log(`[poller] started — every ${minutes} minute(s)`);
+  guardedPoll(); // run once at boot so new deploys don't wait a full interval
 }
