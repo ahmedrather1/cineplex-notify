@@ -215,28 +215,37 @@ export default function App() {
   const isSuccess = step === 3;
 
   return (
-    <main className={isSuccess ? 'app app-centered' : 'app'}>
-      {!isSuccess && (
-        <header className="app-header">
-          <h1>Cineplex Showtime Alerts</h1>
-          <p>
-            Pick a movie and your theatres, leave an email, and get notified when
-            new showtimes are released.
-          </p>
-        </header>
-      )}
+    <>
+      <main className={isSuccess ? 'app app-centered' : 'app'}>
+        {!isSuccess && (
+          <header className="app-header">
+            <h1>Marquee</h1>
+            <p>
+              Pick a movie and your theatres, leave an email, and get notified when
+              new showtimes are released.
+            </p>
+          </header>
+        )}
 
-      {step < 3 && (
-        <ol className="steps">
-          {STEPS.map((label, i) => (
-            <li key={label} className={i === step ? 'active' : i < step ? 'done' : ''}>
-              {i + 1}. {label}
-            </li>
-          ))}
-        </ol>
-      )}
+        {step < 3 && (
+          <ol className="steps">
+            {STEPS.map((label, i) => (
+              <li key={label} className={i === step ? 'active' : i < step ? 'done' : ''}>
+                {i + 1}. {label}
+              </li>
+            ))}
+          </ol>
+        )}
 
-      {body}
-    </main>
+        {body}
+      </main>
+
+      <footer className="site-disclaimer">
+        Marquee is an independent service, not affiliated with, endorsed by, or
+        sponsored by Cineplex Entertainment Inc. Showtime and movie data come from
+        publicly available Cineplex listings; all trademarks belong to their
+        respective owners.
+      </footer>
+    </>
   );
 }

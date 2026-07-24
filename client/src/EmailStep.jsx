@@ -56,7 +56,7 @@ export default function EmailStep({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                View on Cineplex ↗
+                View movie details ↗
               </a>
             </>
           )}

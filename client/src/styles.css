@@ -969,3 +969,15 @@ a.session:focus-visible {
     opacity: 0;
   }
 }
+
+/* Non-affiliation disclaimer pinned at the bottom of the site (every state). */
+.site-disclaimer {
+  max-width: 640px;
+  margin: 2.5rem auto 1.5rem;
+  padding: 1rem 1.25rem 0;
+  border-top: 1px solid var(--border, #2a2a35);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted, #8a8a99);
+  text-align: center;
+}

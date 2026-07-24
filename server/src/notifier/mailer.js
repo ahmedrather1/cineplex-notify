@@ -6,6 +6,13 @@
 
 import nodemailer from 'nodemailer';
 
+// Non-affiliation notice, mirrored in the site footer (client App.jsx).
+const DISCLAIMER =
+  'Marquee is an independent service, not affiliated with, endorsed by, or ' +
+  'sponsored by Cineplex Entertainment Inc. Showtime and movie data come from ' +
+  'publicly available Cineplex listings; all trademarks belong to their ' +
+  'respective owners.';
+
 let transport = null;
 
 /** Lazy singleton SMTP transport from env. Empty SMTP_USER ⇒ no auth. */
@@ -140,8 +147,10 @@ function renderText(subscription, groups, unsubscribeUrl) {
     lines.push('');
   }
   lines.push('--');
-  lines.push(`You're receiving this because you subscribed to alerts for ${subscription.movieName}.`);
+  lines.push(`You're receiving this because you subscribed to Marquee alerts for ${subscription.movieName}.`);
   lines.push(`Unsubscribe: ${unsubscribeUrl}`);
+  lines.push('');
+  lines.push(DISCLAIMER);
   return lines.join('\n');
 }
 
@@ -181,10 +190,11 @@ ${rows}
 ${note ? `  <p style="margin:0 0 8px; color:#444;">${escapeHtml(note)}</p>\n` : ''}  ${theatreBlocks}
   <hr style="margin:24px 0 12px; border:none; border-top:1px solid #ddd;">
   <p style="font-size:12px; color:#888;">
-    You're receiving this because you subscribed to alerts for
+    You're receiving this because you subscribed to Marquee alerts for
     ${escapeHtml(subscription.movieName)}.
     <a href="${escapeHtml(unsubscribeUrl)}" style="color:#888;">Unsubscribe</a>
   </p>
+  <p style="font-size:11px; color:#aaa; margin-top:8px;">${escapeHtml(DISCLAIMER)}</p>
 </div>`;
 }
 
@@ -200,7 +210,7 @@ export async function sendNewShowingsEmail(subscription, sessions) {
   const n = sessions.length;
 
   await getTransport().sendMail({
-    from: process.env.MAIL_FROM || 'Cineplex Alerts <alerts@example.com>',
+    from: process.env.MAIL_FROM || 'Marquee <alerts@example.com>',
     to: subscription.email,
     subject: `${n} new showtime${n === 1 ? '' : 's'} for ${subscription.movieName}`,
     text: renderText(subscription, groups, unsubscribeUrl),
