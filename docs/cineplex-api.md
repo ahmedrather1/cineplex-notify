@@ -102,6 +102,22 @@ param does NOT work — filter client-side.
 ]
 ```
 
+### Advance / coming-soon showings (filmId-only query)
+
+`GET /showtimes?language=en&filmId=<id>` with **no `date` and no `locationId`**
+returns every showing for the film across all theatres and dates in one call
+(same nested shape). This is the only way to see **advance showings** for
+coming-soon films — they sit months beyond any date-by-date forward window
+(e.g. Dune: Part 3, a December release, has advance IMAX showings visible in
+July). `getFilmShowtimes(filmId)` wraps it.
+
+Caveats:
+- **National scope, large payload** — ~15 MB for a wide now-playing film (150
+  theatres). Fetch server-side, filter by theatre, and cache (~10 min).
+- `filmId + locationId` **without** a date returns an empty body. The API
+  supports `filmId` alone, or `filmId + locationId + date` — not
+  `filmId + locationId`.
+
 ### Linking users to a showtime
 
 Use `deeplinkUrl` (public share link; 302-redirects to the movie page with the

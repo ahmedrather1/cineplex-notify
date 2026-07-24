@@ -70,6 +70,22 @@ export async function getShowtimes({ locationId, date, filmId }) {
   });
 }
 
+/**
+ * All showings for one film across every theatre and date in a single call —
+ * `/showtimes?filmId=` with NO date or location. Same nested response shape as
+ * getShowtimes(), so flattenSessions() applies. This is the ONLY way to see
+ * advance/coming-soon showings, which sit months out beyond any date-by-date
+ * forward window (e.g. a December release surfaced in July). Callers must
+ * filter by theatre: the response is national and can be large (~15 MB for a
+ * wide now-playing film), so fetch server-side and cache it.
+ *
+ * Note: filmId + locationId without a date returns an empty body — the API
+ * supports filmId-only OR filmId+locationId+date, not filmId+locationId alone.
+ */
+export async function getFilmShowtimes(filmId) {
+  return cx('/showtimes', { language: 'en', filmId });
+}
+
 /** Format a Date as the MM/DD/YYYY string the showtimes endpoint requires. */
 export function toApiDate(d) {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
