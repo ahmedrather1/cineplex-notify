@@ -29,13 +29,13 @@ async function getMoviesById() {
 }
 
 /**
- * Urgency lane a movie belongs to. `isNowPlaying === true` → 'slow' (heavy
- * payloads, weekly schedule drops aren't time-critical); everything else —
- * coming-soon, or not found in getMovies() — → 'fast' (advance on-sales are
- * the latency-critical, cheap-to-fetch case).
+ * Urgency lane a movie belongs to. Coming-soon → 'fast' (advance on-sales are
+ * the latency-critical, cheap-to-fetch case). Now-playing and anything not
+ * found in getMovies() → 'slow' (heavy payloads / unknown films default to the
+ * conservative lane so an unexpected film can't trigger frequent 16 MB fetches).
  */
 function laneForMovie(movieId, moviesById) {
-  return moviesById.get(movieId)?.isNowPlaying === true ? 'slow' : 'fast';
+  return moviesById.get(movieId)?.isComingSoon === true ? 'fast' : 'slow';
 }
 
 /**
