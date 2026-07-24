@@ -38,6 +38,16 @@ export function inTimeWindow(showStartDateTime, timeStart, timeEnd) {
 }
 
 /**
+ * True if a session's local start time falls inside ANY of the
+ * subscription's time-of-day windows (`[{ start?, end? }]`; per-window
+ * semantics as in inTimeWindow). Empty or missing array = any time.
+ */
+export function inAnyTimeWindow(showStartDateTime, timeWindows) {
+  if (!timeWindows || timeWindows.length === 0) return true;
+  return timeWindows.some((w) => inTimeWindow(showStartDateTime, w.start, w.end));
+}
+
+/**
  * Fetch + flatten showtimes for every distinct (movieId, theatreId) pair,
  * one request per day for `lookaheadDays`, sequential with a polite delay.
  * @returns {Map<string, Array>} pairKey → flattened sessions for that pair
@@ -116,10 +126,10 @@ export async function pollOnce() {
           }
         }
       }
-      // Drop sessions outside the subscription's time-of-day window BEFORE
+      // Drop sessions outside the subscription's time-of-day windows BEFORE
       // seeding/diffing, so both passes see the same filtered universe.
       const sessions = [...byKey.values()].filter((s) =>
-        inTimeWindow(s.showStartDateTime, sub.timeStart, sub.timeEnd)
+        inAnyTimeWindow(s.showStartDateTime, sub.timeWindows)
       );
 
       if (!sub.seeded) {
