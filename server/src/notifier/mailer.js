@@ -48,18 +48,23 @@ function formatWindowTime(hhmm) {
   return `${hour12}:${String(m).padStart(2, '0')} ${h < 12 ? 'a.m.' : 'p.m.'}`;
 }
 
+/** One window as email copy: "12:00 p.m. – 5:00 p.m.", "after 5:00 p.m.", "before 9:00 p.m." */
+function describeWindow({ start, end }) {
+  if (start && end) return `${formatWindowTime(start)} – ${formatWindowTime(end)}`;
+  if (start) return `after ${formatWindowTime(start)}`;
+  if (end) return `before ${formatWindowTime(end)}`;
+  return null; // both bounds absent — the API rejects these; skip defensively
+}
+
 /**
- * One-line description of the subscription's time-of-day window, or null when
- * it has none. Open-ended windows get "after"/"before" phrasing.
+ * One-line description of the subscription's time-of-day windows (match ANY),
+ * e.g. "Showing showtimes: 12:00 p.m. – 5:00 p.m., or 9:00 p.m. – 2:00 a.m.",
+ * or null when it has none (empty array = any time).
  */
-function windowNote({ timeStart, timeEnd }) {
+function windowNote({ timeWindows }) {
   // No trailing '.': the closing "a.m."/"p.m." already ends the sentence.
-  if (timeStart && timeEnd) {
-    return `Showing showtimes between ${formatWindowTime(timeStart)} and ${formatWindowTime(timeEnd)}`;
-  }
-  if (timeStart) return `Showing showtimes after ${formatWindowTime(timeStart)}`;
-  if (timeEnd) return `Showing showtimes before ${formatWindowTime(timeEnd)}`;
-  return null;
+  const parts = (timeWindows ?? []).map(describeWindow).filter(Boolean);
+  return parts.length ? `Showing showtimes: ${parts.join(', or ')}` : null;
 }
 
 function escapeHtml(s) {
