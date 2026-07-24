@@ -1,7 +1,7 @@
 // Server entry (shared foundation) — thin on purpose: WS1 owns routes.js,
 // WS2 owns notifier/. Avoid editing this file from workstream branches.
 
-import 'dotenv/config';
+import './env.js'; // must stay first — loads .env before db.js reads DATABASE_URL
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
