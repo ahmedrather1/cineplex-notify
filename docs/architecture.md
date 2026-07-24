@@ -36,7 +36,7 @@ All under `/api`. In dev, the Vite server proxies `/api` → `http://localhost:3
 | `GET /api/movies`          | —                                                     | `Movie[]`: `{ id, name, releaseDate, posterUrl, genres, isNowPlaying, isComingSoon }` |
 | `GET /api/theatres`        | —                                                     | `Theatre[]`: `{ theatreId, name, city, provinceCode }` — full national list, flattened |
 | `POST /api/subscriptions`  | `{ email, movieId, movieName, theatreIds: number[], timeWindows?: [{ start?, end? }], dateStart?, dateEnd? }` | `201 { id }` — validate email format, movieId present, theatreIds non-empty. `timeWindows` is an optional array (max 6) of time-of-day windows; a showtime matches if it falls in **any** window. Each window's `start`/`end` is an optional `'HH:MM'` 24h string (absent = unbounded on that side); `start > end` means an overnight wrap (e.g. `21:00`–`02:00`). Omitted/empty array = any time. A window with neither bound, a non-object entry, or a malformed time → 400. `dateStart`/`dateEnd` are optional `'YYYY-MM-DD'` strings (each independently optional; empty string = absent) restricting which showtime **dates** trigger alerts, both bounds inclusive. Malformed date, `dateStart > dateEnd`, or `dateEnd` before today → 400. |
-| `GET /api/showtimes`       | query: `movieId` (int), `theatreIds` (comma-separated ints, max 5), `days` (optional, default 7, max 14) | `[{ theatreId, theatreName, sessions: [{ sessionId, showStartDateTime, experienceTypes, auditorium, isSoldOut, ticketingUrl }] }]` — currently available showings for a movie at the given theatres over the next `days` days, sessions sorted by start time, deduped by sessionId. One entry per requested theatre (empty `sessions` if none). Invalid params → 400. Cache ~10 min per (movieId, theatreId, date); fetch sequentially with a ~100 ms polite delay. |
+| `GET /api/showtimes`       | query: `movieId` (int), `theatreIds` (comma-separated ints, max 5) | `[{ theatreId, theatreName, sessions: [{ sessionId, showStartDateTime, experienceTypes, auditorium, isSoldOut, ticketingUrl }] }]` — **all upcoming** showings (today onward, including advance/coming-soon dates months out) for a movie at the given theatres, sessions sorted by start time, deduped by sessionId. One entry per requested theatre (empty `sessions` if none). Backed by `getFilmShowtimes(movieId)` (one national call per film), filtered to the requested theatres; cache the film's flattened sessions ~10 min per movieId (bounded LRU, a few entries). No `days` param — the film call already spans the film's whole window. Invalid params → 400. |
 | `GET /api/unsubscribe/:id` | — (linked from every email)                           | `200` small human-readable confirmation page; `404` if unknown id |
 
 Errors: JSON `{ error: "message" }` with 4xx/5xx status. No other endpoints —
@@ -71,11 +71,14 @@ CREATE TABLE IF NOT EXISTS seen_sessions (
 
 ## Poller semantics (WS2)
 
-1. Every `POLL_INTERVAL_MINUTES` (default 30), fetch showtimes for each distinct
-   `(movieId, theatreId)` across all subscriptions for the next
-   `POLL_LOOKAHEAD_DAYS` (default 30) days — grouped so N subscribers to the
-   same movie/theatre cost one Cineplex request. Flatten with
-   `cineplex.js#flattenSessions()`.
+1. Every `POLL_INTERVAL_MINUTES` (default 30), for each **distinct movieId**
+   across all subscriptions, call `getFilmShowtimes(movieId)` once (one national
+   call covering all theatres and all dates, including advance showings) and
+   flatten with `cineplex.js#flattenSessions()`. Then per subscription, filter
+   to its `theatreIds`. This replaces the old per-(movie,theatre)-per-day loop:
+   far fewer Cineplex requests and it catches advance/coming-soon showings.
+   `POLL_LOOKAHEAD_DAYS` is obsolete (the film call already spans the whole
+   window).
 2. Per subscription, first drop sessions outside its date range — the
    session's date is `showStartDateTime.slice(0, 10)`, compared inclusively
    against `date_start`/`date_end` (null = unbounded; lexicographic compare
