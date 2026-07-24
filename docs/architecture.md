@@ -35,7 +35,7 @@ All under `/api`. In dev, the Vite server proxies `/api` → `http://localhost:3
 |----------------------------|-------------------------------------------------------|----------|
 | `GET /api/movies`          | —                                                     | `Movie[]`: `{ id, name, releaseDate, posterUrl, genres, isNowPlaying, isComingSoon }` |
 | `GET /api/theatres`        | —                                                     | `Theatre[]`: `{ theatreId, name, city, provinceCode }` — full national list, flattened |
-| `POST /api/subscriptions`  | `{ email, movieId, movieName, theatreIds: number[] }` | `201 { id }` — validate email format, movieId present, theatreIds non-empty |
+| `POST /api/subscriptions`  | `{ email, movieId, movieName, theatreIds: number[], timeStart?, timeEnd? }` | `201 { id }` — validate email format, movieId present, theatreIds non-empty. `timeStart`/`timeEnd` are optional `'HH:MM'` 24h strings (each independently optional) limiting alerts to showtimes in that local-time-of-day window; `timeStart > timeEnd` means an overnight wrap (e.g. `21:00`–`02:00`). Invalid format → 400. |
 | `GET /api/unsubscribe/:id` | — (linked from every email)                           | `200` small human-readable confirmation page; `404` if unknown id |
 
 Errors: JSON `{ error: "message" }` with 4xx/5xx status. No other endpoints —
@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   movie_id    INTEGER NOT NULL,
   movie_name  TEXT NOT NULL,            -- denormalized for email copy
   theatre_ids INTEGER[] NOT NULL,
+  time_start  TEXT,                            -- 'HH:MM' 24h or NULL (no lower bound)
+  time_end    TEXT,                            -- 'HH:MM' 24h or NULL (no upper bound)
   seeded      BOOLEAN NOT NULL DEFAULT FALSE, -- first poll seeds seen_sessions WITHOUT emailing
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -72,9 +74,13 @@ CREATE TABLE IF NOT EXISTS seen_sessions (
    `POLL_LOOKAHEAD_DAYS` (default 30) days — grouped so N subscribers to the
    same movie/theatre cost one Cineplex request. Flatten with
    `cineplex.js#flattenSessions()`.
-2. Per subscription, diff sessions against `seen_sessions`. If `seeded` is
-   false, insert everything and **do not email** — showtimes that existed
-   before subscribing aren't "new".
+2. Per subscription, first drop sessions outside its time-of-day window
+   (compare `showStartDateTime`'s `HH:MM` against `time_start`/`time_end`;
+   null bound = unbounded on that side; `time_start > time_end` wraps
+   overnight: match `t >= start || t <= end`). Then diff the remainder
+   against `seen_sessions`. If `seeded` is false, insert everything (post-
+   filter) and **do not email** — showtimes that existed before subscribing
+   aren't "new".
 3. New sessions → **one digest email per subscription per poll** (never one per
    showtime), grouped by theatre, with local showtimes, ticketing links, and
    the unsubscribe link `${PUBLIC_BASE_URL}/api/unsubscribe/{id}`.
