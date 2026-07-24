@@ -12,6 +12,7 @@ export default function EmailStep({
   theatres,
   timeWindows,
   dateRange,
+  formats,
   onBack,
   onSubmit,
   submitting,
@@ -67,6 +68,8 @@ export default function EmailStep({
         <dd>{formatWindows(timeWindows)}</dd>
         <dt>Dates</dt>
         <dd>{formatDateRange(dateRange)}</dd>
+        <dt>Formats</dt>
+        <dd>{formats.length ? formats.join(', ') : 'Any format'}</dd>
       </dl>
 
       <ShowtimesPanel
@@ -74,6 +77,7 @@ export default function EmailStep({
         theatreIds={theatres.map((t) => t.theatreId)}
         timeWindows={timeWindows}
         dateRange={dateRange}
+        formats={formats}
       />
 
       <form className="email-form" onSubmit={handleSubmit} noValidate>

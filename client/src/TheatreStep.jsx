@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import TimeWindowPicker from './TimeWindowPicker.jsx';
 import DateRangePicker from './DateRangePicker.jsx';
+import FormatPicker from './FormatPicker.jsx';
 import { isRangeReversed } from './dateRange.js';
 
 export default function TheatreStep({
@@ -11,6 +12,8 @@ export default function TheatreStep({
   onTimeSelectionChange,
   dateRange,
   onDateRangeChange,
+  formats,
+  onFormatsChange,
   onBack,
   onNext,
 }) {
@@ -83,6 +86,8 @@ export default function TheatreStep({
       <TimeWindowPicker value={timeSelection} onChange={onTimeSelectionChange} />
 
       <DateRangePicker value={dateRange} onChange={onDateRangeChange} />
+
+      <FormatPicker value={formats} onChange={onFormatsChange} />
 
       <div className="step-nav">
         <button type="button" className="btn" onClick={onBack}>
