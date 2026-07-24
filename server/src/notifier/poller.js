@@ -2,7 +2,7 @@
 // Semantics in docs/architecture.md §Poller. Owns this file and mailer.js.
 
 import 'dotenv/config'; // no-op when index.js already loaded it; enables standalone runs
-import { getFilmShowtimes, getMovies, flattenSessions } from '../cineplex.js';
+import { getFilmShowtimes, getMovies, flattenSessions, primaryFormat } from '../cineplex.js';
 import {
   listSubscriptions,
   getSeenSessionKeys,
@@ -77,6 +77,16 @@ export function inDateRange(showStartDateTime, dateStart, dateEnd) {
   return (dateStart == null || d >= dateStart) && (dateEnd == null || d <= dateEnd);
 }
 
+/**
+ * True if a session's headline viewing format matches the subscription's
+ * format filter. Empty or missing `formats` = any format; otherwise the
+ * session's `primaryFormat(experienceTypes)` must be one of the chosen formats.
+ */
+export function matchesFormat(experienceTypes, formats) {
+  if (!formats || formats.length === 0) return true;
+  return formats.includes(primaryFormat(experienceTypes));
+}
+
 /** Today's date in the server's local timezone as 'YYYY-MM-DD'. */
 function localToday() {
   const now = new Date();
@@ -133,13 +143,14 @@ async function processSubscription(sub, sessionsByMovie, lane) {
       byKey.set(`${s.theatreId}:${s.sessionId}`, s);
     }
   }
-  // Drop sessions outside the subscription's date range, then outside its
-  // time-of-day windows, BEFORE seeding/diffing, so both passes see the
-  // same filtered universe.
+  // Drop sessions outside the subscription's date range, time-of-day windows,
+  // then format filter, BEFORE seeding/diffing, so both passes see the same
+  // filtered universe.
   const sessions = [...byKey.values()].filter(
     (s) =>
       inDateRange(s.showStartDateTime, sub.dateStart, sub.dateEnd) &&
-      inAnyTimeWindow(s.showStartDateTime, sub.timeWindows)
+      inAnyTimeWindow(s.showStartDateTime, sub.timeWindows) &&
+      matchesFormat(s.experienceTypes, sub.formats)
   );
 
   if (!sub.seeded) {
