@@ -71,14 +71,22 @@ CREATE TABLE IF NOT EXISTS seen_sessions (
 
 ## Poller semantics (WS2)
 
-1. Every `POLL_INTERVAL_MINUTES` (default 30), for each **distinct movieId**
-   across all subscriptions, call `getFilmShowtimes(movieId)` once (one national
-   call covering all theatres and all dates, including advance showings) and
-   flatten with `cineplex.js#flattenSessions()`. Then per subscription, filter
-   to its `theatreIds`. This replaces the old per-(movie,theatre)-per-day loop:
-   far fewer Cineplex requests and it catches advance/coming-soon showings.
-   `POLL_LOOKAHEAD_DAYS` is obsolete (the film call already spans the whole
-   window).
+1. **Two urgency tiers** (Cineplex has no conditional-request support, so every
+   poll is a full fetch — we spend frequency where it matters). Classify each
+   subscribed movie via `getMovies()` (cached): `isNowPlaying === true` →
+   **slow lane**; anything coming-soon → **fast lane**. Rationale: the
+   latency-critical event is advance tickets for a hot release going on sale
+   (coming-soon films), and those are *also* the cheap ones to bulk-fetch
+   (few theatres, tiny payload). Now-playing films are the 16 MB monsters and
+   their new-showtime events (weekly schedule drops) aren't time-critical.
+   - **Fast lane** every `FAST_POLL_SECONDS` (default 30): coming-soon movies.
+   - **Slow lane** every `SLOW_POLL_MINUTES` (default 5): now-playing movies.
+   Each lane: for each **distinct movieId** in its set, call
+   `getFilmShowtimes(movieId)` once (national, all dates incl. advance),
+   `flattenSessions()`, then per subscription filter to its `theatreIds`.
+   One national call per movie serves all its subscribers/theatres. A movie
+   not found in `getMovies()` defaults to the slow lane. `POLL_LOOKAHEAD_DAYS`
+   is obsolete.
 2. Per subscription, first drop sessions outside its date range — the
    session's date is `showStartDateTime.slice(0, 10)`, compared inclusively
    against `date_start`/`date_end` (null = unbounded; lexicographic compare
@@ -96,8 +104,11 @@ CREATE TABLE IF NOT EXISTS seen_sessions (
    the unsubscribe link `${PUBLIC_BASE_URL}/api/unsubscribe/{id}`.
 4. Insert into `seen_sessions` only after a successful send — at-least-once
    delivery is acceptable; silently losing notifications is not.
-5. Poller runs in-process (`node-cron`), started from `index.js`. Guard with
-   `ENABLE_POLLER` so extra instances / local dev don't double-send.
+5. Poller runs in-process, started from `index.js`. Each lane is an
+   independent `setInterval` with its own overlap guard (skip a tick if the
+   previous run of that lane is still in flight) and a boot kick-off. Guard the
+   whole poller with `ENABLE_POLLER` so extra instances / local dev don't
+   double-send. Run a single instance in production.
 
 ## Config
 

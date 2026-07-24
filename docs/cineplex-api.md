@@ -118,6 +118,14 @@ Caveats:
   supports `filmId` alone, or `filmId + locationId + date` — not
   `filmId + locationId`.
 
+### No conditional requests / caching (verified 2026-07-24)
+
+The showtimes endpoints return `Cache-Control: no-store, must-revalidate,
+no-cache` and **no `ETag` or `Last-Modified`**, so `If-None-Match` /
+`If-Modified-Since` can't cheaply detect "unchanged" — every poll is a full
+fetch. No rate-limit headers (`X-RateLimit-*`, `Retry-After`) are exposed
+either, so poll conservatively and tier by need (see architecture §Poller).
+
 ### Linking users to a showtime
 
 Use `deeplinkUrl` (public share link; 302-redirects to the movie page with the
