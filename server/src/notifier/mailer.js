@@ -82,21 +82,34 @@ function describeDateRange({ dateStart, dateEnd }) {
   return null;
 }
 
+/** Natural-language list: "IMAX", "IMAX or UltraAVX", "IMAX, UltraAVX or VIP". */
+function describeFormats(formats) {
+  const f = formats ?? [];
+  if (f.length === 0) return null;
+  if (f.length === 1) return f[0];
+  return `${f.slice(0, -1).join(', ')} or ${f[f.length - 1]}`;
+}
+
 /**
- * One-line description of the subscription's time-of-day windows (match ANY)
- * and/or date range, or null when it has neither. Examples:
+ * One-line description of the subscription's format, time-of-day windows
+ * (match ANY), and/or date range, or null when it has none. Examples:
  *   "Showing showtimes: 12:00 p.m. – 5:00 p.m., or 9:00 p.m. – 2:00 a.m."
  *   "Showing showtimes between Aug 1 and Aug 15."
- *   "Showing showtimes: after 5:00 p.m., from Aug 1."
+ *   "Showing IMAX or UltraAVX showtimes."
+ *   "Showing IMAX showtimes: after 5:00 p.m., between Aug 1 and Aug 15."
  */
-function windowNote({ timeWindows, dateStart, dateEnd }) {
+function windowNote({ timeWindows, dateStart, dateEnd, formats }) {
+  const fmt = describeFormats(formats);
   const times = (timeWindows ?? []).map(describeWindow).filter(Boolean);
   const dates = describeDateRange({ dateStart, dateEnd });
+  const head = `Showing ${fmt ? `${fmt} ` : ''}showtimes`;
   let note = null;
   if (times.length) {
-    note = `Showing showtimes: ${times.join(', or ')}${dates ? `, ${dates}` : ''}`;
+    note = `${head}: ${times.join(', or ')}${dates ? `, ${dates}` : ''}`;
   } else if (dates) {
-    note = `Showing showtimes ${dates}`;
+    note = `${head} ${dates}`;
+  } else if (fmt) {
+    note = head;
   }
   // End with exactly one period ("p.m." already carries its own).
   return note && !note.endsWith('.') ? `${note}.` : note;
