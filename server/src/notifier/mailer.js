@@ -41,6 +41,27 @@ function formatLocal(showStartDateTime) {
   });
 }
 
+/** Format an 'HH:MM' 24h bound as e.g. "5:00 p.m." for email copy. */
+function formatWindowTime(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${h < 12 ? 'a.m.' : 'p.m.'}`;
+}
+
+/**
+ * One-line description of the subscription's time-of-day window, or null when
+ * it has none. Open-ended windows get "after"/"before" phrasing.
+ */
+function windowNote({ timeStart, timeEnd }) {
+  // No trailing '.': the closing "a.m."/"p.m." already ends the sentence.
+  if (timeStart && timeEnd) {
+    return `Showing showtimes between ${formatWindowTime(timeStart)} and ${formatWindowTime(timeEnd)}`;
+  }
+  if (timeStart) return `Showing showtimes after ${formatWindowTime(timeStart)}`;
+  if (timeEnd) return `Showing showtimes before ${formatWindowTime(timeEnd)}`;
+  return null;
+}
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replaceAll('&', '&amp;')
@@ -70,6 +91,10 @@ function groupByTheatre(sessions) {
 
 function renderText(subscription, groups, unsubscribeUrl) {
   const lines = [`New showtimes for ${subscription.movieName}:`, ''];
+  const note = windowNote(subscription);
+  if (note) {
+    lines.push(note, '');
+  }
   for (const g of groups) {
     lines.push(g.theatreName);
     for (const s of g.sessions) {
@@ -88,6 +113,7 @@ function renderText(subscription, groups, unsubscribeUrl) {
 }
 
 function renderHtml(subscription, groups, unsubscribeUrl) {
+  const note = windowNote(subscription);
   const theatreBlocks = groups
     .map((g) => {
       const rows = g.sessions
@@ -119,7 +145,7 @@ ${rows}
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; max-width:600px; margin:0 auto; color:#1a1a1a;">
   <h2 style="margin:0 0 8px;">New showtimes for ${escapeHtml(subscription.movieName)}</h2>
   <p style="margin:0 0 8px; color:#444;">Times shown are local to each theatre.</p>
-  ${theatreBlocks}
+${note ? `  <p style="margin:0 0 8px; color:#444;">${escapeHtml(note)}</p>\n` : ''}  ${theatreBlocks}
   <hr style="margin:24px 0 12px; border:none; border-top:1px solid #ddd;">
   <p style="font-size:12px; color:#888;">
     You're receiving this because you subscribed to alerts for
