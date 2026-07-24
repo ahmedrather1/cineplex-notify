@@ -35,7 +35,7 @@ All under `/api`. In dev, the Vite server proxies `/api` → `http://localhost:3
 |----------------------------|-------------------------------------------------------|----------|
 | `GET /api/movies`          | —                                                     | `Movie[]`: `{ id, name, releaseDate, posterUrl, genres, isNowPlaying, isComingSoon }` |
 | `GET /api/theatres`        | —                                                     | `Theatre[]`: `{ theatreId, name, city, provinceCode }` — full national list, flattened |
-| `POST /api/subscriptions`  | `{ email, movieId, movieName, theatreIds: number[], timeWindows?: [{ start?, end? }] }` | `201 { id }` — validate email format, movieId present, theatreIds non-empty. `timeWindows` is an optional array (max 6) of time-of-day windows; a showtime matches if it falls in **any** window. Each window's `start`/`end` is an optional `'HH:MM'` 24h string (absent = unbounded on that side); `start > end` means an overnight wrap (e.g. `21:00`–`02:00`). Omitted/empty array = any time. A window with neither bound, a non-object entry, or a malformed time → 400. |
+| `POST /api/subscriptions`  | `{ email, movieId, movieName, theatreIds: number[], timeWindows?: [{ start?, end? }], dateStart?, dateEnd? }` | `201 { id }` — validate email format, movieId present, theatreIds non-empty. `timeWindows` is an optional array (max 6) of time-of-day windows; a showtime matches if it falls in **any** window. Each window's `start`/`end` is an optional `'HH:MM'` 24h string (absent = unbounded on that side); `start > end` means an overnight wrap (e.g. `21:00`–`02:00`). Omitted/empty array = any time. A window with neither bound, a non-object entry, or a malformed time → 400. `dateStart`/`dateEnd` are optional `'YYYY-MM-DD'` strings (each independently optional; empty string = absent) restricting which showtime **dates** trigger alerts, both bounds inclusive. Malformed date, `dateStart > dateEnd`, or `dateEnd` before today → 400. |
 | `GET /api/showtimes`       | query: `movieId` (int), `theatreIds` (comma-separated ints, max 5), `days` (optional, default 7, max 14) | `[{ theatreId, theatreName, sessions: [{ sessionId, showStartDateTime, experienceTypes, auditorium, isSoldOut, ticketingUrl }] }]` — currently available showings for a movie at the given theatres over the next `days` days, sessions sorted by start time, deduped by sessionId. One entry per requested theatre (empty `sessions` if none). Invalid params → 400. Cache ~10 min per (movieId, theatreId, date); fetch sequentially with a ~100 ms polite delay. |
 | `GET /api/unsubscribe/:id` | — (linked from every email)                           | `200` small human-readable confirmation page; `404` if unknown id |
 
@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   movie_name  TEXT NOT NULL,            -- denormalized for email copy
   theatre_ids INTEGER[] NOT NULL,
   time_windows JSONB NOT NULL DEFAULT '[]',    -- [{ start?, end? }] 'HH:MM' each; [] = any time; match ANY
+  date_start  TEXT,                            -- 'YYYY-MM-DD' or NULL (no lower bound), inclusive
+  date_end    TEXT,                            -- 'YYYY-MM-DD' or NULL (no upper bound), inclusive
   seeded      BOOLEAN NOT NULL DEFAULT FALSE, -- first poll seeds seen_sessions WITHOUT emailing
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -74,11 +76,16 @@ CREATE TABLE IF NOT EXISTS seen_sessions (
    `POLL_LOOKAHEAD_DAYS` (default 30) days — grouped so N subscribers to the
    same movie/theatre cost one Cineplex request. Flatten with
    `cineplex.js#flattenSessions()`.
-2. Per subscription, first drop sessions outside its time-of-day windows: a
-   session passes if `time_windows` is empty OR its `HH:MM` matches **any**
-   window (per window: absent bound = unbounded on that side; `start > end`
-   wraps overnight: match `t >= start || t <= end`). Then diff the remainder
-   against `seen_sessions`. If `seeded` is false, insert everything (post-
+2. Per subscription, first drop sessions outside its date range — the
+   session's date is `showStartDateTime.slice(0, 10)`, compared inclusively
+   against `date_start`/`date_end` (null = unbounded; lexicographic compare
+   is safe for `YYYY-MM-DD`) — then drop sessions outside its time-of-day
+   windows: a session passes if `time_windows` is empty OR its `HH:MM`
+   matches **any** window (per window: absent bound = unbounded on that
+   side; `start > end` wraps overnight: match `t >= start || t <= end`).
+   Then diff the remainder against `seen_sessions`. Subscriptions whose
+   `date_end` is already in the past are skipped entirely (no fetch, no
+   email) and logged. If `seeded` is false, insert everything (post-
    filter) and **do not email** — showtimes that existed before subscribing
    aren't "new".
 3. New sessions → **one digest email per subscription per poll** (never one per
