@@ -149,6 +149,10 @@ function renderText(subscription, groups, unsubscribeUrl) {
   lines.push('--');
   lines.push(`You're receiving this because you subscribed to Marquee alerts for ${subscription.movieName}.`);
   lines.push(`Unsubscribe: ${unsubscribeUrl}`);
+  const donateUrl = (process.env.DONATE_URL || '').trim();
+  if (donateUrl) {
+    lines.push(`Marquee is free — if it's useful, you can help cover hosting costs: ${donateUrl}`);
+  }
   lines.push('');
   lines.push(DISCLAIMER);
   return lines.join('\n');
@@ -184,6 +188,11 @@ ${rows}
     })
     .join('\n');
 
+  const donateUrl = (process.env.DONATE_URL || '').trim();
+  const supportBlock = donateUrl
+    ? `\n  <p style="font-size:12px; color:#888; margin-top:8px;">Marquee is free — if it's useful, you can <a href="${escapeHtml(donateUrl)}" style="color:#888;">help cover hosting costs</a>.</p>`
+    : '';
+
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; max-width:600px; margin:0 auto; color:#1a1a1a;">
   <h2 style="margin:0 0 8px;">New showtimes for ${escapeHtml(subscription.movieName)}</h2>
   <p style="margin:0 0 8px; color:#444;">Times shown are local to each theatre.</p>
@@ -193,7 +202,7 @@ ${note ? `  <p style="margin:0 0 8px; color:#444;">${escapeHtml(note)}</p>\n` : 
     You're receiving this because you subscribed to Marquee alerts for
     ${escapeHtml(subscription.movieName)}.
     <a href="${escapeHtml(unsubscribeUrl)}" style="color:#888;">Unsubscribe</a>
-  </p>
+  </p>${supportBlock}
   <p style="font-size:11px; color:#aaa; margin-top:8px;">${escapeHtml(DISCLAIMER)}</p>
 </div>`;
 }
