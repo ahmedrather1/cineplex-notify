@@ -3,7 +3,7 @@
 
 import 'dotenv/config'; // no-op when index.js already loaded it; enables standalone runs
 import cron from 'node-cron';
-import { getShowtimes, flattenSessions, toApiDate } from '../cineplex.js';
+import { getFilmShowtimes, flattenSessions } from '../cineplex.js';
 import {
   listSubscriptions,
   getSeenSessionKeys,
@@ -15,8 +15,6 @@ import { sendNewShowingsEmail } from './mailer.js';
 const REQUEST_DELAY_MS = 200; // politeness gap between Cineplex requests
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const pairKey = (movieId, theatreId) => `${movieId}:${theatreId}`;
 
 /**
  * True if a session's local start time falls inside a subscription's
@@ -68,56 +66,46 @@ function localToday() {
 }
 
 /**
- * Fetch + flatten showtimes for every distinct (movieId, theatreId) pair,
- * one request per day for `lookaheadDays`, sequential with a polite delay.
- * @returns {Map<string, Array>} pairKey → flattened sessions for that pair
+ * Fetch + flatten showtimes for every distinct movieId in one national
+ * `getFilmShowtimes` call each — sequential with a polite delay. A single
+ * film call spans all theatres and all dates, including advance/coming-soon
+ * showings that sit months beyond any date-by-date forward window.
+ * @returns {Map<number, Array>} movieId → flattened sessions across all theatres
  */
-async function fetchSessionsByPair(pairs, lookaheadDays) {
-  const sessionsByPair = new Map();
-  const today = new Date();
+async function fetchSessionsByMovie(movieIds) {
+  const sessionsByMovie = new Map();
   let first = true;
 
-  for (const { movieId, theatreId } of pairs) {
-    const key = pairKey(movieId, theatreId);
-    const sessions = [];
-    for (let offset = 0; offset < lookaheadDays; offset++) {
-      if (!first) await sleep(REQUEST_DELAY_MS);
-      first = false;
-      const date = new Date(today);
-      date.setDate(date.getDate() + offset);
-      try {
-        const raw = await getShowtimes({
-          locationId: theatreId,
-          date: toApiDate(date),
-          filmId: movieId,
-        });
-        // filmId already filters server-side; keep the guard in case it's ignored.
-        sessions.push(
-          ...flattenSessions(raw).filter((s) => s.movieId === movieId)
-        );
-      } catch (err) {
-        // One bad day/pair must not sink the whole poll pass.
-        console.error(
-          `[poller] showtimes fetch failed (theatre ${theatreId}, film ${movieId}, ${toApiDate(date)}): ${err.message}`
-        );
-      }
+  for (const movieId of movieIds) {
+    if (!first) await sleep(REQUEST_DELAY_MS);
+    first = false;
+    try {
+      const raw = await getFilmShowtimes(movieId);
+      // filmId filters server-side; keep the guard in case it's ever ignored.
+      sessionsByMovie.set(
+        movieId,
+        flattenSessions(raw).filter((s) => s.movieId === movieId)
+      );
+    } catch (err) {
+      // One bad film must not sink the whole poll pass — skip it this round.
+      console.error(`[poller] film showtimes fetch failed (film ${movieId}): ${err.message}`);
+      sessionsByMovie.set(movieId, []);
     }
-    sessionsByPair.set(key, sessions);
   }
-  return sessionsByPair;
+  return sessionsByMovie;
 }
 
 /**
- * Single poll pass: fetch showtimes grouped by distinct (movieId, theatreId),
- * diff per subscription against seen_sessions, seed silently on first pass,
- * otherwise email one digest per subscription and only then mark seen.
+ * Single poll pass: one national getFilmShowtimes call per distinct movieId,
+ * then per subscription filter to its theatres/date-range/time-windows, diff
+ * against seen_sessions, seed silently on first pass, otherwise email one
+ * digest per subscription and only then mark seen.
  */
 export async function pollOnce() {
-  const lookaheadDays = Number(process.env.POLL_LOOKAHEAD_DAYS || 30);
   const allSubs = await listSubscriptions();
 
   // Skip subscriptions whose date range already ended: no diff, no email, and
-  // (below) no Cineplex fetches unless another subscription shares the pair.
+  // (below) no Cineplex fetch unless another live subscription needs the film.
   const today = localToday();
   const subs = allSubs.filter((sub) => {
     if (sub.dateEnd != null && sub.dateEnd < today) {
@@ -131,30 +119,26 @@ export async function pollOnce() {
     return;
   }
 
-  // Distinct (movieId, theatreId) pairs so N subscribers to the same
-  // movie/theatre cost one set of Cineplex requests.
-  const pairs = new Map();
-  for (const sub of subs) {
-    for (const theatreId of sub.theatreIds) {
-      pairs.set(pairKey(sub.movieId, theatreId), { movieId: sub.movieId, theatreId });
-    }
-  }
+  // One fetch per distinct movie: a national film call already spans every
+  // theatre and date (incl. advance showings), so N subscribers to the same
+  // film — any theatres — cost exactly one Cineplex request.
+  const movieIds = [...new Set(subs.map((sub) => sub.movieId))];
 
   console.log(
-    `[poller] polling ${pairs.size} (movie, theatre) pair(s) for ${subs.length} subscription(s), ${lookaheadDays} day(s) ahead`
+    `[poller] polling ${movieIds.length} film(s) for ${subs.length} subscription(s)`
   );
-  const sessionsByPair = await fetchSessionsByPair(pairs.values(), lookaheadDays);
+  const sessionsByMovie = await fetchSessionsByMovie(movieIds);
 
   for (const sub of subs) {
     try {
-      // Dedupe by (theatreId, sessionId): the API sometimes lists the same
+      // Filter the film's national sessions to this subscription's theatres,
+      // deduping by (theatreId, sessionId): the API sometimes lists the same
       // session under multiple experience blocks.
+      const theatreIds = new Set(sub.theatreIds);
       const byKey = new Map();
-      for (const theatreId of sub.theatreIds) {
-        for (const s of sessionsByPair.get(pairKey(sub.movieId, theatreId)) ?? []) {
-          if (!byKey.has(`${s.theatreId}:${s.sessionId}`)) {
-            byKey.set(`${s.theatreId}:${s.sessionId}`, s);
-          }
+      for (const s of sessionsByMovie.get(sub.movieId) ?? []) {
+        if (theatreIds.has(s.theatreId) && !byKey.has(`${s.theatreId}:${s.sessionId}`)) {
+          byKey.set(`${s.theatreId}:${s.sessionId}`, s);
         }
       }
       // Drop sessions outside the subscription's date range, then outside its
