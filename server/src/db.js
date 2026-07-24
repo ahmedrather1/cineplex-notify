@@ -25,6 +25,7 @@ export async function migrate() {
     ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS time_windows JSONB NOT NULL DEFAULT '[]'::jsonb;
     ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS date_start TEXT;
     ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS date_end TEXT;
+    ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS formats TEXT[] NOT NULL DEFAULT '{}';
     CREATE TABLE IF NOT EXISTS seen_sessions (
       subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       theatre_id      INTEGER NOT NULL,
@@ -42,11 +43,12 @@ export async function createSubscription({
   timeWindows = [], // [{ start?, end? }] 'HH:MM' 24h each; [] = any time; match ANY
   dateStart = null, // 'YYYY-MM-DD', or null for no lower bound
   dateEnd = null,   // 'YYYY-MM-DD', or null for no upper bound
+  formats = [],     // canonical format names (see cineplex.js SELECTABLE_FORMATS); [] = any format; match ANY
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO subscriptions (email, movie_id, movie_name, theatre_ids, time_windows, date_start, date_end)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7) RETURNING id`,
-    [email, movieId, movieName, theatreIds, JSON.stringify(timeWindows), dateStart, dateEnd]
+    `INSERT INTO subscriptions (email, movie_id, movie_name, theatre_ids, time_windows, date_start, date_end, formats)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8) RETURNING id`,
+    [email, movieId, movieName, theatreIds, JSON.stringify(timeWindows), dateStart, dateEnd, formats]
   );
   return rows[0].id;
 }
@@ -67,6 +69,7 @@ export async function listSubscriptions() {
     timeWindows: r.time_windows,
     dateStart: r.date_start,
     dateEnd: r.date_end,
+    formats: r.formats,
     seeded: r.seeded,
     createdAt: r.created_at,
   }));
