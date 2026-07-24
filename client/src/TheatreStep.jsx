@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
+import TimeWindowPicker from './TimeWindowPicker.jsx';
 
-export default function TheatreStep({ theatres, selectedIds, onToggle, onBack, onNext }) {
+export default function TheatreStep({
+  theatres,
+  selectedIds,
+  onToggle,
+  timeWindow,
+  onTimeWindowChange,
+  onBack,
+  onNext,
+}) {
   const [filter, setFilter] = useState('');
 
   const visible = useMemo(() => {
@@ -66,6 +75,8 @@ export default function TheatreStep({ theatres, selectedIds, onToggle, onBack, o
           ))}
         </div>
       )}
+
+      <TimeWindowPicker value={timeWindow} onChange={onTimeWindowChange} />
 
       <div className="step-nav">
         <button type="button" className="btn" onClick={onBack}>

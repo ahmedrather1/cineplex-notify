@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 3021;
 const poster = (id) =>
   `https://mediafiles.cineplex.com/Central/Film/Posters/${id}_320_470.jpg`;
 
+const slugify = (name) =>
+  name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 const movies = [
   { id: 37617, name: 'Dune: Part Three', releaseDate: '2026-12-18', posterUrl: poster(37617), genres: ['Science Fiction', 'Adventure'], isNowPlaying: false, isComingSoon: true },
   { id: 36981, name: 'The Batman: Shadows of Gotham', releaseDate: '2026-10-02', posterUrl: poster(36981), genres: ['Action', 'Crime'], isNowPlaying: false, isComingSoon: true },
@@ -33,6 +36,11 @@ const movies = [
   { id: 36820, name: 'Knives Out: Wake Up Dead Man', releaseDate: '2025-12-12', posterUrl: poster(36820), genres: ['Mystery', 'Comedy'], isNowPlaying: true, isComingSoon: false },
   { id: 37710, name: 'Moana (Live Action)', releaseDate: '2026-07-10', posterUrl: poster(37710), genres: ['Family', 'Adventure'], isNowPlaying: false, isComingSoon: true },
 ];
+
+// Same shape as the real server (server/src/cineplex.js#getMovies).
+for (const m of movies) {
+  m.detailPageUrl = `https://www.cineplex.com/movie/${slugify(m.name)}`;
+}
 
 const theatres = [
   { theatreId: 1412, name: 'Cineplex Cinemas Yonge-Dundas and VIP', city: 'Toronto', provinceCode: 'ON' },
@@ -58,6 +66,75 @@ const theatres = [
   { theatreId: 5308, name: 'Cineplex Cinemas Park Lane', city: 'Halifax', provinceCode: 'NS' },
 ];
 
+// --- GET /api/showtimes fixtures --------------------------------------
+// A few sessions across two days (incl. one sold-out); theatre 1416
+// (Scotiabank Theatre Toronto) always returns empty sessions so the
+// client's empty state is exercisable.
+const EMPTY_SESSIONS_THEATRE = 1416;
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function dateStr(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function sessionsFor(theatreId) {
+  if (theatreId === EMPTY_SESSIONS_THEATRE) return [];
+  const plan = [
+    // [dayOffset, 'HH:MM', experienceTypes, auditorium, isSoldOut]
+    [1, '13:05', ['Regular'], 'Auditorium 3', false],
+    [1, '18:45', ['IMAX'], 'Auditorium 1', true],
+    [1, '21:30', ['Regular'], 'Auditorium 5', false],
+    [2, '16:10', ['UltraAVX'], 'Auditorium 7', false],
+    [2, '23:50', ['Regular'], 'Auditorium 5', false],
+  ];
+  return plan.map(([offset, hhmm, experienceTypes, auditorium, isSoldOut], i) => {
+    const sessionId = theatreId * 1000 + i;
+    return {
+      sessionId,
+      showStartDateTime: `${dateStr(offset)}T${hhmm}:00`,
+      experienceTypes,
+      auditorium,
+      isSoldOut,
+      ticketingUrl: `https://tickets.cineplex.com/?sessionId=${sessionId}`,
+    };
+  });
+}
+
+function handleShowtimes(url, res) {
+  const params = new URL(url, 'http://localhost').searchParams;
+  const movieId = Number(params.get('movieId'));
+  const rawIds = params.get('theatreIds') || '';
+  const theatreIds = rawIds === '' ? [] : rawIds.split(',').map((s) => Number(s.trim()));
+  const days = params.has('days') ? Number(params.get('days')) : 7;
+
+  const bad =
+    !Number.isInteger(movieId) ||
+    movieId <= 0 ||
+    theatreIds.length === 0 ||
+    theatreIds.length > 5 ||
+    theatreIds.some((n) => !Number.isInteger(n) || n <= 0) ||
+    !Number.isInteger(days) ||
+    days < 1 ||
+    days > 14;
+  if (bad) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'movieId, theatreIds (1-5 comma-separated ints) and days (1-14) are required' }));
+    return;
+  }
+
+  const body = theatreIds.map((theatreId) => ({
+    theatreId,
+    theatreName:
+      theatres.find((t) => t.theatreId === theatreId)?.name || `Theatre ${theatreId}`,
+    sessions: sessionsFor(theatreId),
+  }));
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
 function notFound(res) {
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
@@ -78,6 +155,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (method === 'GET' && url.startsWith('/api/showtimes')) {
+    handleShowtimes(url, res);
+    return;
+  }
+
   if (method === 'POST' && url === '/api/subscriptions') {
     let body = '';
     req.on('data', (chunk) => (body += chunk));
@@ -90,19 +172,34 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         return;
       }
-      const { email, movieId, movieName, theatreIds } = parsed;
+      const { email, movieId, movieName, theatreIds, timeStart, timeEnd } = parsed;
       if (!email || !movieId || !movieName || !Array.isArray(theatreIds) || theatreIds.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'email, movieId, movieName and non-empty theatreIds are required' }));
         return;
+      }
+      // Optional time-of-day window: each bound independently optional,
+      // 'HH:MM' 24h when present (docs/architecture.md §Internal REST contract).
+      const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+      for (const [field, val] of [['timeStart', timeStart], ['timeEnd', timeEnd]]) {
+        if (val !== undefined && (typeof val !== 'string' || !HHMM_RE.test(val))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `${field} must be an 'HH:MM' 24h string` }));
+          return;
+        }
       }
       if (email === 'fail@example.com') {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'This email address is not accepting subscriptions (mock failure)' }));
         return;
       }
+      // Echo the window back so dev payloads are verifiable end-to-end.
       res.writeHead(201, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ id: crypto.randomUUID() }));
+      res.end(JSON.stringify({
+        id: crypto.randomUUID(),
+        ...(timeStart !== undefined ? { timeStart } : {}),
+        ...(timeEnd !== undefined ? { timeEnd } : {}),
+      }));
     });
     return;
   }

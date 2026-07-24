@@ -44,7 +44,8 @@ export default function MovieStep({ movies, onSelect }) {
             <button
               key={f.key}
               type="button"
-              className={`btn ${filter === f.key ? 'selected' : ''}`}
+              className={`btn chip-btn ${filter === f.key ? 'selected' : ''}`}
+              aria-pressed={filter === f.key}
               onClick={() => setFilter(f.key)}
             >
               {f.label}
