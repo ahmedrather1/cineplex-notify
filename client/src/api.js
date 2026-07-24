@@ -12,13 +12,14 @@ async function json(res) {
 export const fetchMovies = () => fetch('/api/movies').then(json);
 export const fetchTheatres = () => fetch('/api/theatres').then(json);
 
-// Currently available showings for a movie at the given theatres over the
-// next `days` days (docs/architecture.md §Internal REST contract).
-export const fetchShowtimes = ({ movieId, theatreIds, days = 7 }) => {
+// All upcoming showings for a movie at the given theatres — today onward,
+// including advance/coming-soon dates months out (docs/architecture.md
+// §Internal REST contract). No `days` param: the film call spans the whole
+// window.
+export const fetchShowtimes = ({ movieId, theatreIds }) => {
   const params = new URLSearchParams({
     movieId: String(movieId),
     theatreIds: theatreIds.join(','),
-    days: String(days),
   });
   return fetch(`/api/showtimes?${params}`).then(json);
 };
