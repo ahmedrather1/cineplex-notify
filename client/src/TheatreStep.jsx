@@ -5,8 +5,8 @@ export default function TheatreStep({
   theatres,
   selectedIds,
   onToggle,
-  timeWindow,
-  onTimeWindowChange,
+  timeSelection,
+  onTimeSelectionChange,
   onBack,
   onNext,
 }) {
@@ -76,7 +76,7 @@ export default function TheatreStep({
         </div>
       )}
 
-      <TimeWindowPicker value={timeWindow} onChange={onTimeWindowChange} />
+      <TimeWindowPicker value={timeSelection} onChange={onTimeSelectionChange} />
 
       <div className="step-nav">
         <button type="button" className="btn" onClick={onBack}>
