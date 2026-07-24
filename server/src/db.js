@@ -20,8 +20,9 @@ export async function migrate() {
       seeded      BOOLEAN NOT NULL DEFAULT FALSE,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-    ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS time_start TEXT;
-    ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS time_end TEXT;
+    ALTER TABLE subscriptions DROP COLUMN IF EXISTS time_start;
+    ALTER TABLE subscriptions DROP COLUMN IF EXISTS time_end;
+    ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS time_windows JSONB NOT NULL DEFAULT '[]'::jsonb;
     CREATE TABLE IF NOT EXISTS seen_sessions (
       subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       theatre_id      INTEGER NOT NULL,
@@ -36,13 +37,12 @@ export async function createSubscription({
   movieId,
   movieName,
   theatreIds,
-  timeStart = null, // 'HH:MM' 24h, or null for any time
-  timeEnd = null,
+  timeWindows = [], // [{ start?, end? }] 'HH:MM' 24h each; [] = any time; match ANY
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO subscriptions (email, movie_id, movie_name, theatre_ids, time_start, time_end)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [email, movieId, movieName, theatreIds, timeStart, timeEnd]
+    `INSERT INTO subscriptions (email, movie_id, movie_name, theatre_ids, time_windows)
+     VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING id`,
+    [email, movieId, movieName, theatreIds, JSON.stringify(timeWindows)]
   );
   return rows[0].id;
 }
@@ -60,8 +60,7 @@ export async function listSubscriptions() {
     movieId: r.movie_id,
     movieName: r.movie_name,
     theatreIds: r.theatre_ids,
-    timeStart: r.time_start,
-    timeEnd: r.time_end,
+    timeWindows: r.time_windows,
     seeded: r.seeded,
     createdAt: r.created_at,
   }));
