@@ -7,6 +7,7 @@ import MovieStep from './MovieStep.jsx';
 import TheatreStep from './TheatreStep.jsx';
 import EmailStep from './EmailStep.jsx';
 import { buildWindows, formatWindows } from './timeWindow.js';
+import { formatDateRange } from './dateRange.js';
 import { popcornBurst } from './popcorn.js';
 
 // No windows selected: presets empty, custom off — "any time".
@@ -42,6 +43,7 @@ export default function App() {
   const [movie, setMovie] = useState(null);
   const [theatreIds, setTheatreIds] = useState([]);
   const [timeSelection, setTimeSelection] = useState(NO_WINDOWS);
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -80,6 +82,8 @@ export default function App() {
         movieName: movie.name,
         theatreIds,
         timeWindows,
+        dateStart: dateRange.start || undefined,
+        dateEnd: dateRange.end || undefined,
       });
       setConfirmedEmail(email);
       setStep(3);
@@ -95,6 +99,7 @@ export default function App() {
     setMovie(null);
     setTheatreIds([]);
     setTimeSelection(NO_WINDOWS);
+    setDateRange({ start: '', end: '' });
     setApiError(null);
     setConfirmedEmail(null);
   }
@@ -146,6 +151,8 @@ export default function App() {
         onToggle={toggleTheatre}
         timeSelection={timeSelection}
         onTimeSelectionChange={setTimeSelection}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
         onBack={() => setStep(0)}
         onNext={() => {
           setApiError(null);
@@ -159,6 +166,7 @@ export default function App() {
         movie={movie}
         theatres={selectedTheatres}
         timeWindows={timeWindows}
+        dateRange={dateRange}
         onBack={() => setStep(1)}
         onSubmit={submit}
         submitting={submitting}
@@ -185,6 +193,8 @@ export default function App() {
             </ul>
             <p>
               Showtime window: <strong>{formatWindows(timeWindows)}</strong>
+              <br />
+              Dates: <strong>{formatDateRange(dateRange)}</strong>
             </p>
             <p className="fine-print">
               Every email we send includes an unsubscribe link, so you can stop

@@ -25,7 +25,17 @@ export const fetchShowtimes = ({ movieId, theatreIds, days = 7 }) => {
 
 // timeWindows: optional array (max 6) of { start?, end? } 'HH:MM' windows
 // matched ANY; only sent when non-empty — omitted means "any time of day".
-export const createSubscription = ({ email, movieId, movieName, theatreIds, timeWindows }) =>
+// dateStart/dateEnd: optional inclusive 'YYYY-MM-DD' bounds, each sent only
+// when set — omitted means "any date".
+export const createSubscription = ({
+  email,
+  movieId,
+  movieName,
+  theatreIds,
+  timeWindows,
+  dateStart,
+  dateEnd,
+}) =>
   fetch('/api/subscriptions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -35,5 +45,7 @@ export const createSubscription = ({ email, movieId, movieName, theatreIds, time
       movieName,
       theatreIds,
       ...(timeWindows && timeWindows.length > 0 ? { timeWindows } : {}),
+      ...(dateStart ? { dateStart } : {}),
+      ...(dateEnd ? { dateEnd } : {}),
     }),
   }).then(json);
