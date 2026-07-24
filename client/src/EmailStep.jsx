@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import { formatWindows } from './timeWindow.js';
+import { formatDateRange } from './dateRange.js';
 import ShowtimesPanel from './ShowtimesPanel.jsx';
 import { popcornBurst } from './popcorn.js';
 
 // Trivial sanity check on top of the browser's type="email" validation.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function EmailStep({ movie, theatres, timeWindows, onBack, onSubmit, submitting, apiError }) {
+export default function EmailStep({
+  movie,
+  theatres,
+  timeWindows,
+  dateRange,
+  onBack,
+  onSubmit,
+  submitting,
+  apiError,
+}) {
   const [email, setEmail] = useState('');
   const [localError, setLocalError] = useState(null);
 
@@ -55,12 +65,15 @@ export default function EmailStep({ movie, theatres, timeWindows, onBack, onSubm
         <dd>{theatres.map((t) => t.name).join(' · ')}</dd>
         <dt>Showtime window</dt>
         <dd>{formatWindows(timeWindows)}</dd>
+        <dt>Dates</dt>
+        <dd>{formatDateRange(dateRange)}</dd>
       </dl>
 
       <ShowtimesPanel
         movie={movie}
         theatreIds={theatres.map((t) => t.theatreId)}
         timeWindows={timeWindows}
+        dateRange={dateRange}
       />
 
       <form className="email-form" onSubmit={handleSubmit} noValidate>

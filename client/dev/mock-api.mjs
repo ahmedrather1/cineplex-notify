@@ -174,7 +174,7 @@ const server = http.createServer((req, res) => {
       }
       // Old flat timeStart/timeEnd keys are gone from the contract; if a
       // stale client sends them they are simply ignored, not validated.
-      const { email, movieId, movieName, theatreIds, timeWindows } = parsed;
+      const { email, movieId, movieName, theatreIds, timeWindows, dateStart, dateEnd } = parsed;
       if (!email || !movieId || !movieName || !Array.isArray(theatreIds) || theatreIds.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'email, movieId, movieName and non-empty theatreIds are required' }));
@@ -205,16 +205,44 @@ const server = http.createServer((req, res) => {
           return;
         }
       }
+      // Optional dateStart/dateEnd: 'YYYY-MM-DD', each independently
+      // optional, both inclusive; dateStart <= dateEnd, dateEnd not in the
+      // past (docs/architecture.md §Internal REST contract).
+      const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+      for (const [field, val] of [['dateStart', dateStart], ['dateEnd', dateEnd]]) {
+        if (val !== undefined && (typeof val !== 'string' || !DATE_RE.test(val))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `${field} must be a 'YYYY-MM-DD' date` }));
+          return;
+        }
+      }
+      if (dateStart !== undefined && dateEnd !== undefined && dateStart > dateEnd) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'dateStart must be on or before dateEnd' }));
+        return;
+      }
+      if (dateEnd !== undefined) {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        if (dateEnd < today) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'dateEnd must not be in the past' }));
+          return;
+        }
+      }
       if (email === 'fail@example.com') {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'This email address is not accepting subscriptions (mock failure)' }));
         return;
       }
-      // Echo the windows back so dev payloads are verifiable end-to-end.
+      // Echo the windows/dates back so dev payloads are verifiable end-to-end.
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         id: crypto.randomUUID(),
         ...(timeWindows !== undefined ? { timeWindows } : {}),
+        ...(dateStart !== undefined ? { dateStart } : {}),
+        ...(dateEnd !== undefined ? { dateEnd } : {}),
       }));
     });
     return;

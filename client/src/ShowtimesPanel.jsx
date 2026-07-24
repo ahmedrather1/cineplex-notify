@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { fetchShowtimes } from './api.js';
 import { formatTime, matchesAny } from './timeWindow.js';
+import { isDateInRange } from './dateRange.js';
 
 /** '2026-07-24T18:45:00' → { dateLabel: 'Fri, Jul 24', hhmm: '18:45' } */
 function splitLocal(showStartDateTime) {
@@ -38,13 +39,21 @@ function groupByDate(sessions) {
   return groups;
 }
 
-function SessionCard({ session, outside }) {
+function SessionCard({ session, outsideTime, outsideDates }) {
   const sub = [...(session.experienceTypes || []), session.auditorium]
     .filter(Boolean)
     .join(' · ');
   // One fixed-height flag row on every card so in-window and out-of-window
-  // cards keep identical dimensions; sold-out wins when both apply.
-  const flag = session.isSoldOut ? 'Sold out' : outside ? 'Outside your window' : null;
+  // cards keep identical dimensions. Priority when several apply:
+  // sold-out > outside dates > outside time window.
+  const outside = outsideTime || outsideDates;
+  const flag = session.isSoldOut
+    ? 'Sold out'
+    : outsideDates
+      ? 'Outside your dates'
+      : outsideTime
+        ? 'Outside your window'
+        : null;
   const className = `session${session.isSoldOut ? ' sold-out' : ''}${outside ? ' outside-window' : ''}`;
 
   const inner = (
@@ -71,7 +80,7 @@ function SessionCard({ session, outside }) {
   );
 }
 
-export default function ShowtimesPanel({ movie, theatreIds, timeWindows }) {
+export default function ShowtimesPanel({ movie, theatreIds, timeWindows, dateRange }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -143,8 +152,12 @@ export default function ShowtimesPanel({ movie, theatreIds, timeWindows }) {
                       <li key={s.sessionId}>
                         <SessionCard
                           session={s}
-                          outside={
+                          outsideTime={
                             timeWindows.length > 0 && !matchesAny(s.hhmm, timeWindows)
+                          }
+                          outsideDates={
+                            Boolean(dateRange.start || dateRange.end) &&
+                            !isDateInRange(s.showStartDateTime.split('T')[0], dateRange)
                           }
                         />
                       </li>
